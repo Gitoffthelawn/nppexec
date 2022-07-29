@@ -18,15 +18,21 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #include "WarningAnalyzer.h"
 #include "NppExecEngine.h"
+#include "c_base/str_func.h"
 #include "tchar.h"
 #include "richedit.h"
 
-
 static bool match_mask_2( const TCHAR*, const TCHAR*, TCHAR*, TCHAR*, TCHAR*, TCHAR* );
 static void preprocessMask( TCHAR* outMask, const TCHAR* inMask, unsigned int& outMaskType );
-static TCHAR* skip_tabspaces(TCHAR* s);
-static const TCHAR* skip_tabspaces(const TCHAR* s);
 static bool is_num_str(const TCHAR* s);
+
+
+const tregex CWarningAnalyzer::m_rgxFindFilename = tregex( _T( "(?:(([a-zA-Z]:[\\\\/]|\\.)[^.]*\\.[^:\"\\(\\s]{1,8})|(^\\w[^\\s:\\\\/]*\\.\\w{1,8}))(?=[\\s:(\",oline]{1,9}[0-9]+)" ) );
+const tregex CWarningAnalyzer::m_rgxFindFileLineNo = tregex( _T( "(?:^[^0-9a-zA-Z_]+|.*line )([0-9]+).*" ) );
+const tregex CWarningAnalyzer::m_rgxFindFileLinePos = tregex( _T( ".*[^a - zA - Z]( ? : [0 - 9][, :]\\s* | [0 - 9] char[, :] )([0 - 9] + ).*" ) );
+const tregex CWarningAnalyzer::m_rgxFindErrPosIndicator = tregex( _T( "\\s+[\\x5E~]" ) );
+const tregex CWarningAnalyzer::m_rgxFindErrPosIndicatorAtStartOfLine = tregex( _T( "^[\\.\\s]+[\\x5E~]" ) );
+
 
 #define  TCM_FILE1  _T('1')
 #define  TCM_FILE2  _T('2')
@@ -41,6 +47,11 @@ CWarningAnalyzer::CWarningAnalyzer() : m_nLine(0)
                                      , m_nLastFoundIndex(0)
 {
     m_FileName[0] = 0;
+
+    lstrcpy(m_BuiltInErrorFilter.Mask, _T("<built-in error filter>"));
+    m_BuiltInErrorFilter.Effect.rgb = COLOR_CON_TEXTERR; //Only color if found file name and line number
+    m_BuiltInErrorFilter.Effect.Bold = true;
+    m_BuiltInErrorFilter.Effect.Enable = true;
 }
 
 CWarningAnalyzer::~CWarningAnalyzer()
@@ -217,7 +228,11 @@ void CWarningAnalyzer::GetEffect( int FilterNumber, TEffect& Effect ) const
 
 const TCHAR* CWarningAnalyzer::GetMask( int FilterNumber, TCHAR* Mask, int /*MaskLength*/ ) const
 {
-    if ( (FilterNumber < WARN_MAX_FILTER) && (Mask != NULL) )
+    if ( (FilterNumber == WARN_BUILTIN_ERROR_FILTER) && (Mask != NULL) )
+    {
+        lstrcpy( Mask, m_BuiltInErrorFilter.Mask );
+    }
+    else if ( (FilterNumber < WARN_MAX_FILTER) && (Mask != NULL) )
     {
         TCHAR* pstr1       = Mask;
         const TCHAR* pstr2 = m_Filter[FilterNumber].Mask;
@@ -294,8 +309,27 @@ const TCHAR* CWarningAnalyzer::GetMask( int FilterNumber, TCHAR* Mask, int /*Mas
     return ( Mask );
 }
 
+void CWarningAnalyzer::ClearCachedMatches()
+{
+    m_CachedMatches.clear();
+}
+
 bool CWarningAnalyzer::match( const TCHAR* str )
 {
+    tstring sInputString = str;
+
+    TMatchMap::const_iterator itr = m_CachedMatches.find(sInputString);
+    if ( itr != m_CachedMatches.end() )
+    {
+        const TMatchData& md = itr->second;
+        lstrcpy(m_FileName, md.sFileName.c_str());
+        m_nLine = md.nLine;
+        m_nChar = md.nChar;
+        m_nLastFoundIndex = md.nLastFoundIndex;
+
+        return true;
+    }
+
     TCHAR  ostr1[WARN_MAX_FILENAME + 5];
     TCHAR  ostr2[WARN_MAX_FILENAME + 5];
     TCHAR  ostr3[WARN_MAX_FILENAME + 5];
@@ -396,14 +430,14 @@ bool CWarningAnalyzer::match( const TCHAR* str )
             postr2 = m_FileName;
             postr1 = ostr1;
             // skip leading spaces
-            postr1 = skip_tabspaces(postr1);
+            while ( NppExecHelpers::IsAnySpaceChar(*postr1))  ++postr1;
             // copy
             while ( (*postr2++ = *postr1++) != 0 );
             // skip trailing spaces
             --postr2;
             while ( --postr2 >= m_FileName )
             {
-                if ( !NppExecHelpers::IsTabSpaceChar(*postr2) )
+                if ( !NppExecHelpers::IsAnySpaceChar(*postr2) )
                     break;
             }
             *(++postr2) = 0;
@@ -415,15 +449,82 @@ bool CWarningAnalyzer::match( const TCHAR* str )
         }
         
         // skip leading spaces
-        postr3 = skip_tabspaces(postr3);
+        while ( NppExecHelpers::IsAnySpaceChar(*postr3) )  ++postr3;
         m_nLine = _ttoi(postr3);
 
         // skip leading spaces
-        postr4 = skip_tabspaces(postr4);
+        while ( NppExecHelpers::IsAnySpaceChar(*postr4) )  ++postr4;
         m_nChar = _ttoi(postr4);
     }
+    else if ( Runtime::GetNppExec().GetOptions().GetBool(OPTB_CONFLTR_COMPILER_ERRORS) )
+    {
+        // *** START: New regex Warning/Error parser
+        // *** All of the new regex Warning/Error parser is within this else block ***
+        tsmatch match;
+        const tstring HeyStack = str;
+        static std::map<int,int> ErrPositionIndicator;
+        static tstring PreviousFileName;
+        static int PreviousLineNo = 0;
+        if ( std::regex_search( HeyStack, match, m_rgxFindFilename ) && match[0].str().size()) // Find file name (find needle in a hey stack)
+        {
+            tstring filename = match[0].str().size() > 1 && match[0].str()[0] == L'.' ? match[0].str().substr( 1 ) : match[0].str();
+            if ( filename != PreviousFileName )
+            {
+                PreviousFileName = filename;
+                ErrPositionIndicator.clear();
+            }
+            lstrcpyn( m_FileName, filename.c_str(), sizeof( m_FileName )/sizeof( m_FileName[0]) );
+            m_nLastFoundIndex = WARN_BUILTIN_ERROR_FILTER;
+            tstring Suffix = match.suffix();
+            tstring strLineNo = std::regex_replace( Suffix, m_rgxFindFileLineNo, _T("$1") ); // Replace to get file number only
+            if ( strLineNo.size() && isdigit( strLineNo[0] ) )
+            {
+                m_nLine = std::stoi( strLineNo.c_str() );
+                PreviousLineNo = m_nLine;
+                tstring strCharNo = std::regex_replace( HeyStack, m_rgxFindFileLinePos, _T("$1") ); // (if exist) replace to get nChar only
+                if ( strCharNo.size() && isdigit( strCharNo[0] ) )
+                    m_nChar = std::stoi( strCharNo.c_str() );
+                else
+                {
+                    Suffix = match.suffix();
+                    if ( std::regex_search( Suffix, match, m_rgxFindErrPosIndicator ) ) // Find error possition indicator
+                        ErrPositionIndicator[m_nLine] = static_cast<int>(match[0].str().size());
+                    m_nChar = ErrPositionIndicator[m_nLine];
+                }
+            } 
+            else
+            {
+                m_nLine = 0;
+                m_nChar = 0;
+            }
+            if ( filename.size() > 4 && lstrcmpi( filename.c_str() + (filename.size() - 4), _T(".exe")) == 0 )
+                return false;
+            pszMask = m_BuiltInErrorFilter.Mask;
+            m_BuiltInErrorFilter.Effect.rgb = Runtime::GetNppExec().GetConsole().GetCurrentColorTextErr();
+        }
+        else
+        {
+            if ( std::regex_search( HeyStack, match, m_rgxFindErrPosIndicatorAtStartOfLine ) ) // Find error possition indicator
+            {
+                tstring ErrorPositionIndicator = match[0].str().size() > 2 && match[0].str().compare( 0, 3, _T("...") ) == 0 ? match[0].str().substr( 3 ) : match[0].str();
+                ErrPositionIndicator[PreviousLineNo] = static_cast<int>(ErrorPositionIndicator.size());
+            }
+        }
+    } // *** END: New regex Warning/Error parser
 
-    return ( pszMask ? true : false );
+    if ( pszMask )
+    {
+        TMatchData md;
+        md.sFileName = m_FileName;
+        md.nLine = m_nLine;
+        md.nChar = m_nChar;
+        md.nLastFoundIndex = m_nLastFoundIndex;
+
+        m_CachedMatches[sInputString] = md;
+        return true;
+    }
+
+    return false;
 }
 
 bool CWarningAnalyzer::HasEnabledFilters() const
@@ -458,7 +559,8 @@ int CWarningAnalyzer::GetCharNumber() const
 
 long CWarningAnalyzer::GetColor() const
 {
-    const TEffect& effect = m_Filter[ m_nLastFoundIndex ].Effect;
+    const TFilter& filter = (m_nLastFoundIndex == WARN_BUILTIN_ERROR_FILTER) ? m_BuiltInErrorFilter : m_Filter[m_nLastFoundIndex];
+    const TEffect& effect = filter.Effect;
     return ( RGB( effect.Red
                 , effect.Green
                 , effect.Blue
@@ -468,11 +570,17 @@ long CWarningAnalyzer::GetColor() const
 
 int CWarningAnalyzer::GetStyle() const
 {
-    const TEffect& effect = m_Filter[ m_nLastFoundIndex ].Effect;
+    const TFilter& filter = (m_nLastFoundIndex == WARN_BUILTIN_ERROR_FILTER) ? m_BuiltInErrorFilter : m_Filter[m_nLastFoundIndex];
+    const TEffect& effect = filter.Effect;
     return ( ( effect.Italic     ? CFE_ITALIC    : 0 )
            + ( effect.Bold       ? CFE_BOLD      : 0 )
            + ( effect.Underlined ? CFE_UNDERLINE : 0 )
            );
+}
+
+bool CWarningAnalyzer::IsEffectEnabled( int FilterNumber ) const
+{
+    return m_Filter[ FilterNumber ].Effect.Enable;
 }
 
 void CWarningAnalyzer::EnableEffect( int FilterNumber, bool Enable )
@@ -591,7 +699,7 @@ bool match_mask_2( const TCHAR* mask
             {
                 if ( ( *pMask == *pStr ) // exact match, case-sensitive
                   || ( (*pMask == _T('?')) && (*pStr != 0) ) // any character
-                  || ( (*pMask == _T(' ')) && (*pStr == _T('\t')) ) // tab treated as space
+                  || ( (*pMask == _T(' ')) && NppExecHelpers::IsAnySpaceChar(*pStr) ) // tab treated as space
                    ) 
                 {
                     ++pMask;
@@ -609,23 +717,11 @@ bool match_mask_2( const TCHAR* mask
     return false;
 }
 
-TCHAR* skip_tabspaces(TCHAR* s)
-{
-    while ( NppExecHelpers::IsTabSpaceChar(*s) )  ++s;
-    return s;
-}
-
-const TCHAR* skip_tabspaces(const TCHAR* s)
-{
-    while ( NppExecHelpers::IsTabSpaceChar(*s) )  ++s;
-    return s;
-}
-
 bool is_num_str(const TCHAR* s)
 {
     if ( *s )
     {
-        s = skip_tabspaces(s);
+        while ( NppExecHelpers::IsAnySpaceChar(*s) )  ++s;
         if ( *s )
         {
             if ( (*s == _T('-')) || (*s == _T('+')) )

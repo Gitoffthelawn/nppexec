@@ -24,7 +24,11 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <memory>
 #include <map>
 #include <list>
-#include <cassert>
+#include <atomic>
+
+#ifdef _DEBUG
+  #include <cassert>
+#endif
 
 LRESULT CALLBACK nppPluginWndProc(HWND, UINT, WPARAM, LPARAM);
 
@@ -96,6 +100,10 @@ class CScriptEngine : public IScriptEngine
             CMDTYPE_MESSAGEBOX,
             CMDTYPE_EXIT,
             CMDTYPE_NPESENDMSGBUFLEN,
+            CMDTYPE_CALCIF,
+            CMDTYPE_HELP,
+            CMDTYPE_PROCINPUT,
+            CMDTYPE_NPPEXECTEXT,
 
             CMDTYPE_TOTAL_COUNT
         };
@@ -133,7 +141,8 @@ class CScriptEngine : public IScriptEngine
 
         enum eGetCmdTypeFlags {
             ctfUseLogging   = 0x01,
-            ctfIgnorePrefix = 0x02
+            ctfIgnorePrefix = 0x02,
+            ctfReportError  = 0x04
         };
 
     public:
@@ -160,7 +169,9 @@ class CScriptEngine : public IScriptEngine
         eCmdResult DoEnvUnset(const tstr& params);
         eCmdResult DoExit(const tstr& params);
         eCmdResult DoGoTo(const tstr& params);
+        eCmdResult DoHelp(const tstr& params);
         eCmdResult DoIf(const tstr& params);
+        eCmdResult DoCalcIf(const tstr& params);
         eCmdResult DoInputBox(const tstr& params);
         eCmdResult DoLabel(const tstr& params);
         eCmdResult DoMessageBox(const tstr& params);
@@ -173,6 +184,7 @@ class CScriptEngine : public IScriptEngine
         eCmdResult DoNppClose(const tstr& params);
         eCmdResult DoNppConsole(const tstr& params);
         eCmdResult DoNppExec(const tstr& params);
+        eCmdResult DoNppExecText(const tstr& params);
         eCmdResult DoNppMenuCommand(const tstr& params);
         eCmdResult DoNppOpen(const tstr& params);
         eCmdResult DoNppRun(const tstr& params);
@@ -183,6 +195,7 @@ class CScriptEngine : public IScriptEngine
         eCmdResult DoNppSendMsgEx(const tstr& params);
         eCmdResult DoNppSetFocus(const tstr& params);
         eCmdResult DoNppSwitch(const tstr& params);
+        eCmdResult DoProcInput(const tstr& params);
         eCmdResult DoProcSignal(const tstr& params);
         eCmdResult DoSleep(const tstr& params);
         eCmdResult DoSciFind(const tstr& params);
@@ -325,12 +338,28 @@ class CScriptEngine : public IScriptEngine
             static eCmdResult         Exec(CScriptEngine* pEngine, const tstr& params) { return pEngine->DoGoTo(params); }
         };
 
+        struct DoHelpCommand
+        {
+            static const TCHAR* const Name() { return _T("HELP"); }
+            static const TCHAR* const AltName() { return nullptr; }
+            static eCmdType           Type() { return CMDTYPE_HELP; }
+            static eCmdResult         Exec(CScriptEngine* pEngine, const tstr& params) { return pEngine->DoHelp(params); }
+        };
+
         struct DoIfCommand
         {
             static const TCHAR* const Name() { return _T("IF"); }
             static const TCHAR* const AltName() { return nullptr; }
             static eCmdType           Type() { return CMDTYPE_IF; }
             static eCmdResult         Exec(CScriptEngine* pEngine, const tstr& params) { return pEngine->DoIf(params); }
+        };
+
+        struct DoCalcIfCommand
+        {
+            static const TCHAR* const Name() { return _T("IF~"); }
+            static const TCHAR* const AltName() { return nullptr; }
+            static eCmdType           Type() { return CMDTYPE_CALCIF; }
+            static eCmdResult         Exec(CScriptEngine* pEngine, const tstr& params) { return pEngine->DoCalcIf(params); }
         };
 
         struct DoInputBoxCommand
@@ -429,6 +458,14 @@ class CScriptEngine : public IScriptEngine
             static eCmdResult         Exec(CScriptEngine* pEngine, const tstr& params) { return pEngine->DoNppExec(params); }
         };
 
+        struct DoNppExecTextCommand
+        {
+            static const TCHAR* const Name() { return _T("NPP_EXECTEXT"); }
+            static const TCHAR* const AltName() { return nullptr; }
+            static eCmdType           Type() { return CMDTYPE_NPPEXECTEXT; }
+            static eCmdResult         Exec(CScriptEngine* pEngine, const tstr& params) { return pEngine->DoNppExecText(params); }
+        };
+
         struct DoNppMenuCommandCommand
         {
             static const TCHAR* const Name() { return _T("NPP_MENUCOMMAND"); }
@@ -507,6 +544,14 @@ class CScriptEngine : public IScriptEngine
             static const TCHAR* const AltName() { return nullptr; }
             static eCmdType           Type() { return CMDTYPE_NPPSWITCH; }
             static eCmdResult         Exec(CScriptEngine* pEngine, const tstr& params) { return pEngine->DoNppSwitch(params); }
+        };
+
+        struct DoProcInputCommand
+        {
+            static const TCHAR* const Name() { return _T("PROC_INPUT"); }
+            static const TCHAR* const AltName() { return nullptr; }
+            static eCmdType           Type() { return CMDTYPE_PROCINPUT; }
+            static eCmdResult         Exec(CScriptEngine* pEngine, const tstr& params) { return pEngine->DoProcInput(params); }
         };
 
         struct DoProcSignalCommand
@@ -707,7 +752,9 @@ class CScriptEngine : public IScriptEngine
                     registerCommand<DoEnvUnsetCommand>();
                     registerCommand<DoExitCommand>();
                     registerCommand<DoGoToCommand>();
+                    registerCommand<DoHelpCommand>();
                     registerCommand<DoIfCommand>();
+                    registerCommand<DoCalcIfCommand>();
                     registerCommand<DoInputBoxCommand>();
                     registerCommand<DoLabelCommand>();
                     registerCommand<DoMessageBoxCommand>();
@@ -720,6 +767,7 @@ class CScriptEngine : public IScriptEngine
                     registerCommand<DoNppCloseCommand>();
                     registerCommand<DoNppConsoleCommand>();
                     registerCommand<DoNppExecCommand>();
+                    registerCommand<DoNppExecTextCommand>();
                     registerCommand<DoNppMenuCommandCommand>();
                     registerCommand<DoNppOpenCommand>();
                     registerCommand<DoNppRunCommand>();
@@ -730,6 +778,7 @@ class CScriptEngine : public IScriptEngine
                     registerCommand<DoNppSendMsgExCommand>();
                     registerCommand<DoNppSetFocusCommand>();
                     registerCommand<DoNppSwitchCommand>();
+                    registerCommand<DoProcInputCommand>();
                     registerCommand<DoProcSignalCommand>();
                     registerCommand<DoSleepCommand>();
                     registerCommand<DoSciFindCommand>();
@@ -781,12 +830,27 @@ class CScriptEngine : public IScriptEngine
         const tstr& GetLastLoggedCmd() const  { return m_sLoggedCmd; }
         const tstr& GetLastCmdParams() const  { return m_sCmdParams; }
 
-        static eNppExecCmdPrefix checkNppExecCmdPrefix(CNppExec* pNppExec, tstr& Cmd, bool bRemovePrefix = true);
-        static eCmdType getCmdType(CNppExec* pNppExec, tstr& Cmd, unsigned int nFlags = ctfUseLogging);
+        static eNppExecCmdPrefix checkNppExecCmdPrefix(const CNppExec* pNppExec, tstr& Cmd, bool bRemovePrefix = true);
+        static eCmdType getCmdType(CNppExec* pNppExec, tstr& Cmd, unsigned int nFlags = ctfUseLogging|ctfReportError);
         static int      getOnOffParam(const tstr& param);
-        static bool     isCommentOrEmpty(CNppExec* pNppExec, tstr& Cmd);
+        static bool     isCmdCommentOrEmpty(const CNppExec* pNppExec, tstr& Cmd);
+        static bool     isCmdDirective(const CNppExec* pNppExec, tstr& Cmd);
+        static int      isCmdNppExecPrefixed(CNppExec* pNppExec, tstr& cmd, bool bRemovePrefix, bool bSubstituteMacroVars);
+        static bool     isScriptCollateral(const CNppExec* pNppExec, const CListT<tstr>& CmdList);
         static bool     isSkippingThisCommandDueToIfState(eCmdType cmdType, eIfState ifState);
+        static bool     usesDelayedVarSubstitution(eCmdType cmdType);
         static eCmdType modifyCommandLine(CScriptEngine* pScriptEngine, tstr& Cmd, eIfState ifState);
+        static bool     isLocalParam(tstr& param);
+
+        enum eAddCmdFlags {
+            acfKeepLineEndings = 0x01,
+            acfAddEmptyLines   = 0x02
+        };
+        static void addCommandToList(CListT<tstr>& CmdList, tstr& Cmd, unsigned int nFlags);
+        static tCmdList getCmdListFromText(const TCHAR* pszText, unsigned int nFlags);
+        static void removeLineEndings(CListT<tstr>& CmdList);
+        static void removeLineEnding(tstr& Cmd);
+        static tCmdList getCollateralCmdListForChildProcess(CNppExec* pNppExec, const tCmdList& CmdList);
 
         CScriptEngine(CNppExec* pNppExec, const CListT<tstr>& CmdList, const tstr& id);
         virtual ~CScriptEngine();
@@ -825,11 +889,16 @@ class CScriptEngine : public IScriptEngine
         virtual bool GetTriedExitCmd() const { return m_bTriedExitCmd; }
         virtual void SetTriedExitCmd(bool bTriedExitCmd) { m_bTriedExitCmd = bTriedExitCmd; }
 
+        bool IsPrintingMsgReady() const;
+
         virtual void ScriptError(eErrorType type, const TCHAR* cszErrorMessage);
         void UndoAbort(const TCHAR* cszMessage);
 
         void ChildProcessMustBreakAll();
         bool WaitUntilDone(DWORD dwTimeoutMs) const;
+
+        static std::atomic_int nTotalRunningEnginesCount;
+        static std::atomic_int nExecTextEnginesCount;
 
     public:
         typedef std::map< tstr, CListItemT<tstr>* > tLabels;
@@ -840,14 +909,649 @@ class CScriptEngine : public IScriptEngine
             CListItemT<tstr>* pEnd;   // points _after_ last cmd
         } tCmdRange;
 
+        class SavedConfiguration {
+            public:
+                SavedConfiguration() : mHasValues(0)
+                {
+                }
+
+                void setColorTextNorm(const COLORREF& colorTextNorm)
+                {
+                    mColorTextNorm = colorTextNorm;
+                    mHasValues |= fColorTextNorm;
+                }
+
+                void setColorBkgnd(const COLORREF& colorBkgnd)
+                {
+                    mColorBkgnd = colorBkgnd;
+                    mHasValues |= fColorBkgnd;
+                }
+
+                void setUseEditorColors(bool bUseEditorColors)
+                {
+                    mUseEditorColors = bUseEditorColors;
+                    mHasValues |= fUseEditorColors;
+                }
+
+                void setConFltrInclMask(int nConFltrInclMask)
+                {
+                    mConFltrInclMask = nConFltrInclMask;
+                    mHasValues |= fConFltrInclMask;
+                }
+
+                void setConFltrExclMask(int nConFltrExclMask)
+                {
+                    mConFltrExclMask = nConFltrExclMask;
+                    mHasValues |= fConFltrExclMask;
+                }
+
+                void setRplcFltrFindMask(int nRplcFltrFindMask)
+                {
+                    mRplcFltrFindMask = nRplcFltrFindMask;
+                    mHasValues |= fRplcFltrFindMask;
+                }
+
+                void setRplcFltrCaseMask(int nRplcFltrCaseMask)
+                {
+                    mRplcFltrCaseMask = nRplcFltrCaseMask;
+                    mHasValues |= fRplcFltrCaseMask;
+                }
+
+                void setConFltrEnable(bool bConFltrEnable)
+                {
+                    mConFltrEnable = bConFltrEnable;
+                    mHasValues |= fConFltrEnable;
+                }
+
+                void setConFltrRplcEnable(bool bConFltrRplcEnable)
+                {
+                    mConFltrRplcEnable = bConFltrRplcEnable;
+                    mHasValues |= fConFltrRplcEnable;
+                }
+
+                void setConFltrCompilerErrors(bool bConFltrCompilerErrors)
+                {
+                    mConFltrCompilerErrors = bConFltrCompilerErrors;
+                    mHasValues |= fConFltrCompilerErrors;
+                }
+
+                void setWarnEffectEnabled(const bool* pWarnEffectEnabled)
+                {
+                    for ( int i = 0; i < WARN_MAX_FILTER; ++i )
+                    {
+                        mWarnEffectEnabled[i] = pWarnEffectEnabled[i];
+                    }
+                    mHasValues |= fWarnEffectEnabled;
+                }
+
+                void setEnvVar(const tstr& varName, const tstr& varValue)
+                {
+                    mEnvVars[varName] = varValue;
+                    if ( varValue.IsEmpty() && varValue.GetMemSize() != 0 )
+                        mEnvVars[varName].Reserve(1);
+                }
+
+                void setConsoleEncoding(unsigned int nConsoleEncoding)
+                {
+                    mConsoleEncoding = nConsoleEncoding;
+                    mHasValues |= fConsoleEncoding;
+                }
+
+                void setConsoleCatchShortcutKeys(unsigned int nConsoleCatchShortcutKeys)
+                {
+                    mConsoleCatchShortcutKeys = nConsoleCatchShortcutKeys;
+                    mHasValues |= fConsoleCatchShortcutKeys;
+                }
+
+                void setConsoleAnsiEscSeq(int nConsoleAnsiEscSeq)
+                {
+                    mConsoleAnsiEscSeq = nConsoleAnsiEscSeq;
+                    mHasValues |= fConsoleAnsiEscSeq;
+                }
+
+                void setExecClipTextMode(int nExecClipTextMode)
+                {
+                    mExecClipTextMode = nExecClipTextMode;
+                    mHasValues |= fExecClipTextMode;
+                }
+
+                void setExecSelTextMode(int nExecSelTextMode)
+                {
+                    mExecSelTextMode = nExecSelTextMode;
+                    mHasValues |= fExecSelTextMode;
+                }
+
+                void setConsoleAppendMode(bool bConsoleAppendMode)
+                {
+                    mConsoleAppendMode = bConsoleAppendMode;
+                    mHasValues |= fConsoleAppendMode;
+                }
+
+                void setConsoleCdCurDir(bool bConsoleCdCurDir)
+                {
+                    mConsoleCdCurDir = bConsoleCdCurDir;
+                    mHasValues |= fConsoleCdCurDir;
+                }
+
+                void setConsoleCmdHistory(bool bConsoleCmdHistory)
+                {
+                    mConsoleCmdHistory = bConsoleCmdHistory;
+                    mHasValues |= fConsoleCmdHistory;
+                }
+
+                void setConsoleNoIntMsgs(bool bConsoleNoIntMsgs)
+                {
+                    mConsoleNoIntMsgs = bConsoleNoIntMsgs;
+                    mHasValues |= fConsoleNoIntMsgs;
+                }
+
+                void setConsolePrintMsgReady(bool bConsolePrintMsgReady)
+                {
+                    mConsolePrintMsgReady = bConsolePrintMsgReady;
+                    mHasValues |= fConsolePrintMsgReady;
+                }
+
+                void setConsoleNoCmdAliases(bool bConsoleNoCmdAliases)
+                {
+                    mConsoleNoCmdAliases = bConsoleNoCmdAliases;
+                    mHasValues |= fConsoleNoCmdAliases;
+                }
+
+                void setConsoleSetOutputVar(bool bConsoleSetOutputVar)
+                {
+                    mConsoleSetOutputVar = bConsoleSetOutputVar;
+                    mHasValues |= fConsoleSetOutputVar;
+                }
+
+                void setConsoleKillProcTree(bool bConsoleKillProcTree)
+                {
+                    mConsoleKillProcTree = bConsoleKillProcTree;
+                    mHasValues |= fConsoleKillProcTree;
+                }
+
+                void setConsoleDebugLog(bool bConsoleDebugLog)
+                {
+                    mConsoleDebugLog = bConsoleDebugLog;
+                    mHasValues |= fConsoleDebugLog;
+                }
+
+                void setLoggerOutputMode(bool bLoggerOutputMode)
+                {
+                    mLoggerOutputMode = bLoggerOutputMode;
+                    mHasValues |= fLoggerOutputMode;
+                }
+
+                void setConsoleNoEmptyVars(bool bConsoleNoEmptyVars)
+                {
+                    mConsoleNoEmptyVars = bConsoleNoEmptyVars;
+                    mHasValues |= fConsoleNoEmptyVars;
+                }
+
+                void setConsoleDialogVisible(bool bConsoleDialogVisible)
+                {
+                    mConsoleDialogVisible = bConsoleDialogVisible;
+                    mHasValues |= fConsoleDialogVisible;
+                }
+
+                void setConsoleIsOutputEnabled(bool bConsoleIsOutputEnabled)
+                {
+                    mConsoleIsOutputEnabled = bConsoleIsOutputEnabled;
+                    mHasValues |= fConsoleIsOutputEnabled;
+                }
+
+                void setSendMsgBufLen(int nSendMsgBufLen)
+                {
+                    mSendMsgBufLen = nSendMsgBufLen;
+                    mHasValues |= fSendMsgBufLen;
+                }
+
+                bool hasColorTextNorm() const { return ((mHasValues & fColorTextNorm) != 0); }
+                bool hasColorBkgnd() const { return ((mHasValues & fColorBkgnd) != 0); }
+                bool hasUseEditorColors() const { return ((mHasValues & fUseEditorColors) != 0); }
+                bool hasConFltrInclMask() const { return ((mHasValues & fConFltrInclMask) != 0); }
+                bool hasConFltrExclMask() const { return ((mHasValues & fConFltrExclMask) != 0); }
+                bool hasRplcFltrFindMask() const { return ((mHasValues & fRplcFltrFindMask) != 0); }
+                bool hasRplcFltrCaseMask() const { return ((mHasValues & fRplcFltrCaseMask) != 0); }
+                bool hasConFltrEnable() const { return ((mHasValues & fConFltrEnable) != 0); }
+                bool hasConFltrRplcEnable() const { return ((mHasValues & fConFltrRplcEnable) != 0); }
+                bool hasConFltrCompilerErrors() const { return ((mHasValues & fConFltrCompilerErrors) != 0); }
+                bool hasWarnEffectEnabled() const { return ((mHasValues & fWarnEffectEnabled) != 0); }
+                bool hasEnvVar(const tstr& varName) const { return (mEnvVars.find(varName) != mEnvVars.end()); }
+                bool hasConsoleEncoding() const { return ((mHasValues & fConsoleEncoding) != 0); }
+                bool hasConsoleCatchShortcutKeys() const { return ((mHasValues & fConsoleCatchShortcutKeys) != 0); }
+                bool hasConsoleAnsiEscSeq() const { return ((mHasValues & fConsoleAnsiEscSeq) != 0); }
+                bool hasExecClipTextMode() const { return ((mHasValues & fExecClipTextMode) != 0); }
+                bool hasExecSelTextMode() const { return ((mHasValues & fExecSelTextMode) != 0); }
+                bool hasConsoleAppendMode() const { return ((mHasValues & fConsoleAppendMode) != 0); }
+                bool hasConsoleCdCurDir() const { return ((mHasValues & fConsoleCdCurDir) != 0); }
+                bool hasConsoleCmdHistory() const { return ((mHasValues & fConsoleCmdHistory) != 0); }
+                bool hasConsoleNoIntMsgs() const { return ((mHasValues & fConsoleNoIntMsgs) != 0); }
+                bool hasConsolePrintMsgReady() const { return ((mHasValues & fConsolePrintMsgReady) != 0); }
+                bool hasConsoleNoCmdAliases() const { return ((mHasValues & fConsoleNoCmdAliases) != 0); }
+                bool hasConsoleSetOutputVar() const { return ((mHasValues & fConsoleSetOutputVar) != 0); }
+                bool hasConsoleKillProcTree() const { return ((mHasValues & fConsoleKillProcTree) != 0); }
+                bool hasConsoleDebugLog() const { return ((mHasValues & fConsoleDebugLog) != 0); }
+                bool hasLoggerOutputMode() const { return ((mHasValues & fLoggerOutputMode) != 0); }
+                bool hasConsoleNoEmptyVars() const { return ((mHasValues & fConsoleNoEmptyVars) != 0); }
+                bool hasConsoleDialogVisible() const { return ((mHasValues & fConsoleDialogVisible) != 0); }
+                bool hasConsoleIsOutputEnabled() const { return ((mHasValues & fConsoleIsOutputEnabled) != 0); }
+                bool hasSendMsgBufLen() const { return ((mHasValues & fSendMsgBufLen) != 0); }
+
+                int getConFltrInclMask() const { return mConFltrInclMask; }
+                int getConFltrExclMask() const { return mConFltrExclMask; }
+                int getRplcFltrFindMask() const { return mRplcFltrFindMask; }
+                int getRplcFltrCaseMask() const { return mRplcFltrCaseMask; }
+                const bool* getWarnEffectEnabled() const { return mWarnEffectEnabled; }
+                unsigned int getConsoleEncoding() const { return mConsoleEncoding; }
+
+                void removeColorTextNorm() { mHasValues &= ~fColorTextNorm; }
+                void removeColorBkgnd() { mHasValues &= ~fColorBkgnd; }
+                void removeUseEditorColors() { mHasValues &= ~fUseEditorColors; }
+                void removeConFltrInclMask() { mHasValues &= ~fConFltrInclMask; }
+                void removeConFltrExclMask() { mHasValues &= ~fConFltrExclMask; }
+                void removeRplcFltrFindMask() { mHasValues &= ~fRplcFltrFindMask; }
+                void removeRplcFltrCaseMask() { mHasValues &= ~fRplcFltrCaseMask; }
+                void removeConFltrEnable() { mHasValues &= ~fConFltrEnable; }
+                void removeConFltrRplcEnable() { mHasValues &= ~fConFltrRplcEnable; }
+                void removeConFltrCompilerErrors() { mHasValues &= ~fConFltrCompilerErrors; }
+                void removeWarnEffectEnabled() { mHasValues &= ~fWarnEffectEnabled; }
+                void removeEnvVar(const tstr& varName) { auto itr = mEnvVars.find(varName); if (itr != mEnvVars.end()) mEnvVars.erase(itr); }
+                void removeConsoleEncoding() { mHasValues &= ~fConsoleEncoding; }
+                void removeConsoleCatchShortcutKeys() { mHasValues &= ~fConsoleCatchShortcutKeys; }
+                void removeConsoleAnsiEscSeq() { mHasValues &= ~fConsoleAnsiEscSeq; }
+                void removeExecClipTextMode() { mHasValues &= ~fExecClipTextMode; }
+                void removeExecSelTextMode() { mHasValues &= ~fExecSelTextMode; }
+                void removeConsoleAppendMode() { mHasValues &= ~fConsoleAppendMode; }
+                void removeConsoleCdCurDir() { mHasValues &= ~fConsoleCdCurDir; }
+                void removeConsoleCmdHistory() { mHasValues &= ~fConsoleCmdHistory; }
+                void removeConsoleNoIntMsgs() { mHasValues &= ~fConsoleNoIntMsgs; }
+                void removeConsolePrintMsgReady() { mHasValues &= ~fConsolePrintMsgReady; }
+                void removeConsoleNoCmdAliases() { mHasValues &= ~fConsoleNoCmdAliases; }
+                void removeConsoleSetOutputVar() { mHasValues &= ~fConsoleSetOutputVar; }
+                void removeConsoleKillProcTree() { mHasValues &= ~fConsoleKillProcTree; }
+                void removeConsoleDebugLog() { mHasValues &= ~fConsoleDebugLog; }
+                void removeLoggerOutputMode() { mHasValues &= ~fLoggerOutputMode; }
+                void removeConsoleNoEmptyVars() { mHasValues &= ~fConsoleNoEmptyVars; }
+                void removeConsoleDialogVisible() { mHasValues &= ~fConsoleDialogVisible; }
+                void removeConsoleIsOutputEnabled() { mHasValues &= ~fConsoleIsOutputEnabled; }
+                void removeSendMsgBufLen() { mHasValues &= ~fSendMsgBufLen; }
+
+                void Restore(CNppExec* pNppExec)
+                {
+                    if ( mHasValues != 0 )
+                    {
+                        restoreNpeDebugLog(pNppExec);
+                        restoreConColors(pNppExec);
+                        restoreConFilters(pNppExec);
+                        restoreNpeConsole(pNppExec);
+                        restoreNpeNoEmptyVars(pNppExec);
+                        restoreNpeSendMsgBufLen(pNppExec);
+                        restoreNppConsole(pNppExec);
+                        restoreUI(pNppExec); // the last one here
+                    }
+                    if ( !mEnvVars.empty() )
+                    {
+                        restoreEnvVars();
+                    }
+                }
+
+            protected:
+                void restoreConColors(CNppExec* pNppExec)
+                {
+                    bool bNeedToUpdateColours = false;
+                    if ( hasColorTextNorm() )
+                    {
+                        pNppExec->GetConsole().SetCurrentColorTextNorm(mColorTextNorm);
+                        pNppExec->GetConsole().RestoreDefaultTextStyle(true);
+                    }
+                    if ( hasColorBkgnd() )
+                    {
+                        pNppExec->GetConsole().SetCurrentColorBkgnd(mColorBkgnd);
+                        bNeedToUpdateColours = true;
+                    }
+                    if ( hasUseEditorColors() )
+                    {
+                        pNppExec->GetOptions().SetBool(OPTB_CONSOLE_USEEDITORCOLORS, mUseEditorColors);
+                        pNppExec->GetConsole().ApplyEditorColours(false);
+                    }
+                    if ( bNeedToUpdateColours )
+                    {
+                        pNppExec->GetConsole().UpdateColours();
+                    }
+                }
+
+                void restoreConFilters(CNppExec* pNppExec)
+                {
+                    if ( hasConFltrInclMask() )
+                    {
+                        pNppExec->GetOptions().SetInt(OPTI_CONFLTR_INCLMASK, mConFltrInclMask);
+                    }
+                    if ( hasConFltrExclMask() )
+                    {
+                        pNppExec->GetOptions().SetInt(OPTI_CONFLTR_EXCLMASK, mConFltrExclMask);
+                    }
+                    if ( hasRplcFltrFindMask() )
+                    {
+                        pNppExec->GetOptions().SetInt(OPTI_CONFLTR_R_FINDMASK, mRplcFltrFindMask);
+                    }
+                    if ( hasRplcFltrCaseMask() )
+                    {
+                        pNppExec->GetOptions().SetInt(OPTI_CONFLTR_R_CASEMASK, mRplcFltrCaseMask);
+                    }
+                    if ( hasConFltrEnable() )
+                    {
+                        pNppExec->GetOptions().SetBool(OPTB_CONFLTR_ENABLE, mConFltrEnable);
+                    }
+                    if ( hasConFltrRplcEnable() )
+                    {
+                        pNppExec->GetOptions().SetBool(OPTB_CONFLTR_R_ENABLE, mConFltrRplcEnable);
+                    }
+                    if ( hasConFltrCompilerErrors() )
+                    {
+                        pNppExec->GetOptions().SetBool(OPTB_CONFLTR_COMPILER_ERRORS, mConFltrCompilerErrors);
+                    }
+                    if ( hasWarnEffectEnabled() )
+                    {
+                        CWarningAnalyzer& WarnAn = pNppExec->GetWarningAnalyzer();
+                        for ( int i = 0; i < WARN_MAX_FILTER; ++i )
+                        {
+                            WarnAn.EnableEffect(i, mWarnEffectEnabled[i]);
+                        }
+                    }
+                }
+
+                void restoreNpeConsole(CNppExec* pNppExec)
+                {
+                    if ( hasConsoleEncoding() )
+                    {
+                        pNppExec->GetOptions().SetUint(OPTU_CONSOLE_ENCODING, mConsoleEncoding);
+                    }
+                    if ( hasConsoleCatchShortcutKeys() )
+                    {
+                        pNppExec->GetOptions().SetUint(OPTU_CONSOLE_CATCHSHORTCUTKEYS, mConsoleCatchShortcutKeys);
+                    }
+                    if ( hasConsoleAnsiEscSeq() )
+                    {
+                        pNppExec->GetOptions().SetInt(OPTI_CONSOLE_ANSIESCSEQ, mConsoleAnsiEscSeq);
+                    }
+                    if ( hasExecClipTextMode() )
+                    {
+                        pNppExec->GetOptions().SetInt(OPTI_CONSOLE_EXECCLIPTEXTMODE, mExecClipTextMode);
+                    }
+                    if ( hasExecSelTextMode() )
+                    {
+                        pNppExec->GetOptions().SetInt(OPTI_CONSOLE_EXECSELTEXTMODE, mExecSelTextMode);
+                    }
+                    if ( hasConsoleAppendMode() )
+                    {
+                        pNppExec->GetOptions().SetBool(OPTB_CONSOLE_APPENDMODE, mConsoleAppendMode);
+                    }
+                    if ( hasConsoleCdCurDir() )
+                    {
+                        pNppExec->GetOptions().SetBool(OPTB_CONSOLE_CDCURDIR, mConsoleCdCurDir);
+                    }
+                    if ( hasConsoleCmdHistory() )
+                    {
+                        pNppExec->GetOptions().SetBool(OPTB_CONSOLE_CMDHISTORY, mConsoleCmdHistory);
+                    }
+                    if ( hasConsoleNoIntMsgs() )
+                    {
+                        pNppExec->GetOptions().SetBool(OPTB_CONSOLE_NOINTMSGS, mConsoleNoIntMsgs);
+                    }
+                    if ( hasConsolePrintMsgReady() )
+                    {
+                        pNppExec->GetOptions().SetBool(OPTB_CONSOLE_PRINTMSGREADY, mConsolePrintMsgReady);
+                    }
+                    if ( hasConsoleNoCmdAliases() )
+                    {
+                        pNppExec->GetOptions().SetBool(OPTB_CONSOLE_NOCMDALIASES, mConsoleNoCmdAliases);
+                    }
+                    if ( hasConsoleSetOutputVar() )
+                    {
+                        pNppExec->GetOptions().SetBool(OPTB_CONSOLE_SETOUTPUTVAR, mConsoleSetOutputVar);
+                    }
+                    if ( hasConsoleKillProcTree() )
+                    {
+                        pNppExec->GetOptions().SetBool(OPTB_CONSOLE_KILLPROCTREE, mConsoleKillProcTree);
+                    }
+                }
+
+                void restoreNpeDebugLog(CNppExec* pNppExec)
+                {
+                    if ( hasConsoleDebugLog() )
+                    {
+                        pNppExec->GetOptions().SetBool(OPTB_NPE_DEBUGLOG, mConsoleDebugLog);
+                    }
+                    if ( hasLoggerOutputMode() )
+                    {
+                        if ( mLoggerOutputMode )
+                            Runtime::GetLogger().SetOutputMode(true, CNppExec::printScriptString);
+                        else
+                            Runtime::GetLogger().SetOutputMode(false);
+                    }
+                }
+
+                void restoreNpeNoEmptyVars(CNppExec* pNppExec)
+                {
+                    if ( hasConsoleNoEmptyVars() )
+                    {
+                        pNppExec->GetOptions().SetBool(OPTB_CONSOLE_NOEMPTYVARS, mConsoleNoEmptyVars);
+                    }
+                }
+
+                void restoreNpeSendMsgBufLen(CNppExec* pNppExec)
+                {
+                    if ( hasSendMsgBufLen() )
+                    {
+                        pNppExec->GetOptions().SetInt(OPTI_SENDMSG_MAXBUFLEN, mSendMsgBufLen);
+                    }
+                }
+
+                void restoreNppConsole(CNppExec* pNppExec)
+                {
+                    if ( hasConsoleIsOutputEnabled() )
+                    {
+                        if ( mConsoleIsOutputEnabled )
+                        {
+                            pNppExec->GetConsole().SetOutputEnabled(true);
+                            pNppExec->GetConsole().LockConsoleEndPos();
+                        }
+                        else
+                        {
+                            pNppExec->GetConsole().LockConsoleEndPos();
+                            pNppExec->GetConsole().SetOutputEnabled(false);
+                        }
+                    }
+                    if ( hasConsoleDialogVisible() )
+                    {
+                        if ( mConsoleDialogVisible )
+                        {
+                            pNppExec->showConsoleDialog(CNppExec::showIfHidden, CNppExec::scfCmdNppConsole);
+                        }
+                        else
+                        {
+                            pNppExec->showConsoleDialog(CNppExec::hideIfShown, CNppExec::scfCmdNppConsole);
+                            pNppExec->_consoleIsVisible = true;
+                            auto pScriptEngine = pNppExec->GetCommandExecutor().GetRunningScriptEngine();
+                            if ( pScriptEngine )
+                                pScriptEngine->updateFocus();
+                        }
+                    }
+                }
+
+                void restoreEnvVars()
+                {
+                    const auto itrEnd = mEnvVars.cend();
+                    auto itr = mEnvVars.cbegin();
+                    while ( itr != itrEnd )
+                    {
+                        const tstr& varName = itr->first;
+                        const tstr& varValue = itr->second;
+                        SetEnvironmentVariable( varName.c_str(), (varValue.GetMemSize() != 0) ? varValue.c_str() : NULL );
+                        ++itr;
+                    }
+                }
+
+                void restoreUI(CNppExec* pNppExec)
+                {
+                    extern FuncItem  g_funcItem[nbFunc + MAX_USERMENU_ITEMS + 1];
+
+                    if ( hasConFltrEnable() || hasConFltrRplcEnable() )
+                    {
+                        pNppExec->UpdateOutputFilterMenuItem();
+                    }
+                    if ( hasWarnEffectEnabled() )
+                    {
+                        pNppExec->UpdateGoToErrorMenuItem();
+                    }
+                    if ( hasConsoleEncoding() )
+                    {
+                        pNppExec->updateConsoleEncodingFlags();
+                        pNppExec->UpdateConsoleEncoding();
+                    }
+                    
+                    if ( hasConsoleCdCurDir() || hasConsoleCmdHistory() ||
+                         hasConsoleNoIntMsgs() || hasConsoleNoCmdAliases() )
+                    {
+                        HMENU hMenu = pNppExec->GetNppMainMenu();
+                        if ( hMenu )
+                        {
+                            if ( hasConsoleCdCurDir() )
+                            {
+                                ::CheckMenuItem(hMenu, g_funcItem[N_CDCURDIR]._cmdID,
+                                    MF_BYCOMMAND | (mConsoleCdCurDir ? MF_CHECKED : MF_UNCHECKED));
+                            }
+                            if ( hasConsoleCmdHistory() )
+                            {
+                                ::CheckMenuItem(hMenu, g_funcItem[N_CMDHISTORY]._cmdID,
+                                    MF_BYCOMMAND | (mConsoleCmdHistory ? MF_CHECKED : MF_UNCHECKED));
+                            }
+                            if ( hasConsoleNoIntMsgs() )
+                            {
+                                ::CheckMenuItem(hMenu, g_funcItem[N_NOINTMSGS]._cmdID,
+                                    MF_BYCOMMAND | (mConsoleNoIntMsgs ? MF_CHECKED : MF_UNCHECKED));
+                            }
+                          #ifdef _DISABLE_CMD_ALIASES
+                            if ( hasConsoleNoCmdAliases() )
+                            {
+                                ::CheckMenuItem(hMenu, g_funcItem[N_NOCMDALIASES]._cmdID,
+                                    MF_BYCOMMAND | (mConsoleNoCmdAliases ? MF_CHECKED : MF_UNCHECKED));
+                            }
+                          #endif
+                        }
+                    }
+                }
+
+            protected:
+                enum eHasFlags : unsigned int {
+                    fColorTextNorm            = 0x00000001,
+                    fColorBkgnd               = 0x00000002,
+                    fConFltrInclMask          = 0x00000004,
+                    fConFltrExclMask          = 0x00000008,
+                    fRplcFltrFindMask         = 0x00000010,
+                    fRplcFltrCaseMask         = 0x00000020,
+                    fConFltrEnable            = 0x00000040,
+                    fConFltrRplcEnable        = 0x00000080,
+                    fWarnEffectEnabled        = 0x00000100,
+                    fConsoleEncoding          = 0x00000200,
+                    fConsoleCatchShortcutKeys = 0x00000400,
+                    fConsoleAnsiEscSeq        = 0x00000800,
+                    fConsoleAppendMode        = 0x00001000,
+                    fConsoleCdCurDir          = 0x00002000,
+                    fConsoleCmdHistory        = 0x00004000,
+                    fConsoleNoIntMsgs         = 0x00008000,
+                    fConsolePrintMsgReady     = 0x00010000,
+                    fConsoleNoCmdAliases      = 0x00020000,
+                    fConsoleSetOutputVar      = 0x00040000,
+                    fConsoleNoEmptyVars       = 0x00080000,
+                    fConsoleDialogVisible     = 0x00100000,
+                    fConsoleIsOutputEnabled   = 0x00200000,
+                    fSendMsgBufLen            = 0x00400000,
+                    fConsoleDebugLog          = 0x00800000,
+                    fLoggerOutputMode         = 0x01000000,
+                    fConFltrCompilerErrors    = 0x02000000,
+                    fExecClipTextMode         = 0x04000000,
+                    fExecSelTextMode          = 0x08000000,
+                    fConsoleKillProcTree      = 0x10000000,
+                    fUseEditorColors          = 0x20000000
+                };
+
+                // we might use std::optional (C++17) instead, but would it be so fun? :)
+                unsigned int mHasValues;
+
+                // DoConColour:
+                COLORREF mColorTextNorm;
+                COLORREF mColorBkgnd;
+                bool     mUseEditorColors;
+
+                // DoConFilter:
+                int mConFltrInclMask;
+                int mConFltrExclMask;
+                int mRplcFltrFindMask;
+                int mRplcFltrCaseMask;
+                bool mConFltrEnable;
+                bool mConFltrRplcEnable;
+                bool mConFltrCompilerErrors;
+                bool mWarnEffectEnabled[WARN_MAX_FILTER];
+
+                // DoNpeConsole:
+                unsigned int mConsoleEncoding;
+                unsigned int mConsoleCatchShortcutKeys;
+                int  mConsoleAnsiEscSeq;
+                int  mExecClipTextMode;
+                int  mExecSelTextMode;
+                bool mConsoleAppendMode;
+                bool mConsoleCdCurDir;
+                bool mConsoleCmdHistory;
+                bool mConsoleNoIntMsgs;
+                bool mConsolePrintMsgReady;
+                bool mConsoleNoCmdAliases;
+                bool mConsoleSetOutputVar;
+                bool mConsoleKillProcTree;
+
+                // DoNpeDebugLog
+                bool mConsoleDebugLog;
+                bool mLoggerOutputMode;
+
+                // DoNpeNoEmptyVars:
+                bool mConsoleNoEmptyVars;
+
+                // DoNpeSendMsgBufLen:
+                int mSendMsgBufLen;
+
+                // DoNppConsole:
+                bool mConsoleDialogVisible;
+                bool mConsoleIsOutputEnabled;
+
+                // DoEnvSet:
+                std::map<tstr, tstr> mEnvVars;
+        };
+
         class ScriptContext {
             public:
-                tstr              ScriptName;
-                tCmdRange         CmdRange;
-                tLabels           Labels;
-                tMacroVars        LocalMacroVars; // use with GetMacroVars().GetCsUserMacroVars()
-                CStrSplitT<TCHAR> Args;
-                bool              IsNppExeced;
+                tstr               ScriptName;
+                tCmdRange          CmdRange;
+                tLabels            Labels;
+                tMacroVars         LocalMacroVars; // use with GetMacroVars().GetCsUserMacroVars()
+                SavedConfiguration SavedConf;
+                CStrSplitT<TCHAR>  Args;
+                bool               IsNppExeced;
+                bool               IsSharingLocalVars;
+                int                IsPrintingMsgReady;
+
+                ScriptContext()
+                {
+                    CmdRange.pBegin = 0;
+                    CmdRange.pEnd = 0;
+                    IsNppExeced = false;
+                    IsSharingLocalVars = false;
+                    IsPrintingMsgReady = -1;
+                }
+
+                ~ScriptContext()
+                {
+                    SavedConf.Restore( &Runtime::GetNppExec() );
+                }
 
             protected:
                 CBufT<eIfState> IfState;
@@ -897,13 +1601,6 @@ class CScriptEngine : public IScriptEngine
                 }
 
             public:
-                ScriptContext()
-                {
-                    CmdRange.pBegin = 0;
-                    CmdRange.pEnd = 0;
-                    IsNppExeced = false;
-                }
-
                 const int GetIfDepth() const
                 {
                     return IfState.size();
@@ -942,11 +1639,13 @@ class CScriptEngine : public IScriptEngine
         };
 
         typedef struct tExecState {
-            // these 4 variables are needed to prevent infinite loops
+            // these 6 variables are needed to prevent infinite loops
             int nExecCounter;
             int nExecMaxCount;
             int nGoToCounter;
             int nGoToMaxCount;
+            int nExecTextCounter;
+            int nExecTextMaxCount;
             // script name, cmd range, labels and so on
             CListT<ScriptContext> ScriptContextList;
             // pointer to current script line in m_CmdList
@@ -1014,6 +1713,7 @@ class CScriptEngine : public IScriptEngine
         tstr           m_sLoggedCmd; // last cmd as it's present in the log
         unsigned int   m_nRunFlags;
         DWORD          m_dwThreadId;
+        int            m_nPrintingMsgReady;
         bool           m_bTriedExitCmd;
         bool           m_isClosingConsole;
         CEvent         m_eventRunIsDone;
@@ -1029,7 +1729,7 @@ class CScriptEngine : public IScriptEngine
 
         eCmdResult doSendMsg(const tstr& params, int cmdType);
         eCmdResult doSciFindReplace(const tstr& params, eCmdType cmdType);
-        eCmdResult doIf(const tstr& params, bool isElseIf);
+        eCmdResult doIf(const tstr& params, bool isElseIf, bool isCalc);
         eCmdResult doTextLoad(const tstr& params, eCmdType cmdType);
         eCmdResult doTextSave(const tstr& params, eCmdType cmdType);
 
@@ -1060,6 +1760,7 @@ extern const TCHAR MACRO_FILE_EXTONLY[];
 extern const TCHAR MACRO_NPP_DIRECTORY[];
 extern const TCHAR MACRO_NPP_FULL_FILE_PATH[];
 extern const TCHAR MACRO_CURRENT_WORD[];
+extern const TCHAR MACRO_SELECTED_TEXT[];
 extern const TCHAR MACRO_FILE_NAME_AT_CURSOR[];
 extern const TCHAR MACRO_WORKSPACE_ITEM_PATH[];
 extern const TCHAR MACRO_WORKSPACE_ITEM_DIR[];
@@ -1067,6 +1768,7 @@ extern const TCHAR MACRO_WORKSPACE_ITEM_NAME[];
 extern const TCHAR MACRO_WORKSPACE_ITEM_ROOT[];
 extern const TCHAR MACRO_CLOUD_LOCATION_PATH[];
 extern const TCHAR MACRO_CURRENT_LINE[];
+extern const TCHAR MACRO_CURRENT_LINESTR[];
 extern const TCHAR MACRO_CURRENT_COLUMN[];
 extern const TCHAR MACRO_DOCNUMBER[];
 extern const TCHAR MACRO_SYSVAR[];
@@ -1083,6 +1785,7 @@ extern const TCHAR MACRO_OUTPUT1[];
 extern const TCHAR MACRO_OUTPUTL[];
 extern const TCHAR MACRO_EXITCODE[];
 extern const TCHAR MACRO_PID[];
+extern const TCHAR MACRO_IS_PROCESS[];
 extern const TCHAR MACRO_MSG_RESULT[];
 extern const TCHAR MACRO_MSG_WPARAM[];
 extern const TCHAR MACRO_MSG_LPARAM[];
@@ -1092,8 +1795,12 @@ extern const TCHAR MACRO_LAST_CMD_RESULT[];
 extern const TCHAR MACRO_CLIPBOARD_TEXT[];
 extern const TCHAR MACRO_NPP_HWND[];
 extern const TCHAR MACRO_SCI_HWND[];
+extern const TCHAR MACRO_SCI_HWND1[];
+extern const TCHAR MACRO_SCI_HWND2[];
 extern const TCHAR MACRO_CON_HWND[];
 extern const TCHAR MACRO_FOCUSED_HWND[];
+
+extern const TCHAR DIRECTIVE_COLLATERAL[];
 
 //---------------------------------------------------------------------------
 #endif

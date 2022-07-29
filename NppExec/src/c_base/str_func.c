@@ -9,6 +9,21 @@ namespace c_base {
 #endif
 
 
+int is_any_space_char( char ch )
+{
+    switch ( ch )
+    {
+        case ' ':   // 0x20, space
+        case '\t':  // 0x09, tabulation
+        //case '\n':  // 0x0A, line feed
+        case '\v':  // 0x0B, line tabulation
+        case '\f':  // 0x0C, form feed
+        //case '\r':  // 0x0D, carriage return
+            return 1;
+    }
+    return 0;
+}
+
 int str_safe_cmp( const char* str1, const char* str2 )
 {
     if ( str1 )
@@ -350,19 +365,19 @@ char* str_unsafe_rskip_ch( const char* str, int len, const char ch )
     return ( (char *) str );
 }
 
-char* str_safe_rskip_tabspaces( const char* str, int len )
+char* str_safe_rskip_anyspaces( const char* str, int len )
 {
-    return ( (str && (len > 0)) ? str_unsafe_rskip_tabspaces(str, len) : ((char *) str) );
+    return ( (str && (len > 0)) ? str_unsafe_rskip_anyspaces(str, len) : ((char *) str) );
 }
 
 // CONDITION: str != 0 && len >= 0
-char* str_unsafe_rskip_tabspaces( const char* str, int len )
+char* str_unsafe_rskip_anyspaces( const char* str, int len )
 {
     str += len;
     while ( len-- > 0)
     {
         --str;
-        if ((*str != ' ') && (*str != '\t'))
+        if ( !is_any_space_char(*str) )
             break;
     }
     return ( (char *) str );
@@ -386,15 +401,15 @@ char* str_unsafe_skip_ch( const char* str, const char ch )
     return ( (char *) str );
 }
 
-char* str_safe_skip_tabspaces( const char* str )
+char* str_safe_skip_anyspaces( const char* str )
 {
-    return ( str ? str_unsafe_skip_tabspaces(str) : ((char *) str) );
+    return ( str ? str_unsafe_skip_anyspaces(str) : ((char *) str) );
 }
 
 // CONDITION: str != 0
-char* str_unsafe_skip_tabspaces( const char* str )
+char* str_unsafe_skip_anyspaces( const char* str )
 {
-    while ( (*str == ' ') || (*str == '\t') )
+    while ( is_any_space_char(*str) )
     {
         ++str;
     }
@@ -402,6 +417,21 @@ char* str_unsafe_skip_tabspaces( const char* str )
 }
 
 //---------------------------------------------------------------------------
+
+int is_any_space_charw( wchar_t ch )
+{
+    switch ( ch )
+    {
+        case L' ':   // 0x20, space
+        case L'\t':  // 0x09, tabulation
+        //case L'\n':  // 0x0A, line feed
+        case L'\v':  // 0x0B, line tabulation
+        case L'\f':  // 0x0C, form feed
+        //case L'\r':  // 0x0D, carriage return
+            return 1;
+    }
+    return 0;
+}
 
 int strw_safe_cmp( const wchar_t* strw1, const wchar_t* strw2 )
 {
@@ -744,19 +774,19 @@ wchar_t* strw_unsafe_rskip_ch( const wchar_t* strw, int len, const wchar_t wch )
     return ( (wchar_t *) strw );
 }
 
-wchar_t* strw_safe_rskip_tabspaces( const wchar_t* strw, int len )
+wchar_t* strw_safe_rskip_anyspaces( const wchar_t* strw, int len )
 {
-    return ( (strw && (len > 0)) ? strw_unsafe_rskip_tabspaces(strw, len) : ((wchar_t *) strw) );
+    return ( (strw && (len > 0)) ? strw_unsafe_rskip_anyspaces(strw, len) : ((wchar_t *) strw) );
 }
 
 // CONDITION: strw != 0 && len >= 0
-wchar_t* strw_unsafe_rskip_tabspaces( const wchar_t* strw, int len )
+wchar_t* strw_unsafe_rskip_anyspaces( const wchar_t* strw, int len )
 {
     strw += len;
     while ( len-- > 0)
     {
         --strw;
-        if ((*strw != L' ') && (*strw != L'\t'))
+        if ( !is_any_space_charw(*strw) )
             break;
     }
     return ( (wchar_t *) strw );
@@ -780,15 +810,15 @@ wchar_t* strw_unsafe_skip_ch( const wchar_t* strw, const wchar_t wch )
     return ( (wchar_t *) strw );
 }
 
-wchar_t* strw_safe_skip_tabspaces( const wchar_t* strw )
+wchar_t* strw_safe_skip_anyspaces( const wchar_t* strw )
 {
-    return ( strw ? strw_unsafe_skip_tabspaces(strw) : ((wchar_t *) strw) );
+    return ( strw ? strw_unsafe_skip_anyspaces(strw) : ((wchar_t *) strw) );
 }
 
 // CONDITION: strw != 0
-wchar_t* strw_unsafe_skip_tabspaces( const wchar_t* strw )
+wchar_t* strw_unsafe_skip_anyspaces( const wchar_t* strw )
 {
-    while ( (*strw == L' ') || (*strw == L'\t') )
+    while ( is_any_space_charw(*strw) )
     {
         ++strw;
     }

@@ -20,6 +20,132 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
  * NppExec History:
  ****************************************************************************
 
+ v0.8.2 - June 2022
+ ------------------
+ * Glory to Ukraine! Glory to the heroes!
+ + added: new option "Use Editor Colors" (in the Advanced Options).
+   For dark color themes, the following colors may be used:
+     Error   - C0 30 30
+     Message - 40 B0 40
+     Warning - 40 80 C0
+   The default colors (for bright color themes) are:
+     Error   - A0 10 10
+     Message - 20 80 20
+ - fixed: TextColorError (in the Advanced Options) was not applied to the
+   built-in error filter ("npe_console local -- x+").
+ - fixed: in rare cases, the NppExec's Console could "swallow" a first typed
+   character. It was caused by the ConsoleDlg not resetting the value of the
+   `bFuncItemEntered` back to `false`.
+ * changed: IsTabSpaceChar() was replaced with IsAnySpaceChar() to handle
+   additional space characters such as '\v' and \f'.
+ * npp_files updated to Notepad++ 8.4.2.
+ + NppExec Manual updated
+ - fixed: NppExec Manual no more contains the misleading HTML tags saying
+   `META NAME="Generator"`. (The HTML files are actually modified in a text
+   editor such as Notepad++ or AkelPad without any HTML generator).
+
+
+ v0.8.1 - April 2022
+ -------------------
+ * 24.02.2022: Russkii voennyi korabl', idi nakhui!!!
+     In the memory of those who were killed.
+     In the memory of what was destroyed.
+     God bless those who defend.
+     We will build the better future.
+ + added: $(CURRENT_LINESTR), $(SCI_HWND1), $(SCI_HWND2)
+ + added: dynamic reloading of the saved scripts ("npes_saved.txt")
+ + added: multi-line input in NppExec's Console
+ + added: Shift+Enter adds a new line (in NppExec's Console)
+ * the "About" dialog slightly updated
+ - fixed: potential crash around ScriptContextList.DeleteLast()
+ - fixed: CFileBufT::GetLine did not read the trailng empty line
+ * changed: now ConsoleDlg::loadCmdHistory ignores empty lines
+
+
+ v0.8 - February 2022
+ --------------------
+ + added: built-in highlight filter that catches most of compiler error
+   messages, thanks to David Maisonave.
+   This filter is disabled by default to avoid an impact on performance.
+   It is recommended to enable this filter locally, right before running
+   a compiler or an interpreter: "npe_console local -- x+".
+   See also: "NppExec_TechInfo.txt", the 'CompilerErrors' setting.
+ + added: now WarningAnalyzer caches the previously matched lines.
+   It allows the built-in highlight filter (see above) to react to a
+   double-click in the Console even when this filter is disabled at the
+   moment of double-clicking. Explanation: let's consider a situation when
+   the built-in highlight filter had been disabled globally but was locally
+   enabled via "npe_console local -- x+" right before running a compiler. So
+   the messages produced by compiler are analyzed by the built-in highlight
+   filter and the filter is automatically disabled after the compiler exits.
+   Now, as WarningAnalyzer has cached the matched lines from the compiler's
+   output, it is possible to double-click these lines in NppExec's Console
+   to get the cached match result.
+ + added: the last executed script is now saved to "npes_last.txt".
+ + added: new menu items "Execute Selected Text", "Execute Clipboard Text".
+ + NPE_CONSOLE c<N> and s<N> to change the text processing for the
+   Execute Clipboard Text and Execute Selected Text.
+ + NPE_CONSOLE j+/j- to kill process tree on/off.
+ + added: new command "proc_input".
+ + added: new command "npp_exectext".
+ + added: new variables $(SELECTED_TEXT), $(IS_PROCESS).
+ * changed: the menu item "Disable command aliases" has been removed. Use
+   the "npe_console q+/q-" instead.
+ * changed: now "help" command works in NppExec's scripts.
+ * npp_files updated to Notepad++ 8.3.
+ * note: 32-bit NppExec is compatible with Notepad++ 7.9.2 under Windows XP.
+ - fixed: now "set local" (without an argument) prints only local vars.
+ - fixed: "npe_console k3" did not work with Alt+key.
+ + NppExec Manual updated
+
+
+ v0.7.1 - August 2021
+ --------------------
+ * changed: now IF/IF~/ELSE IF use delayed $(var) substitution.
+   It means that IF "$(var)" != "" will work even when the value of $(var)
+   contains inner " quote character(s).
+ + added: now npe_debuglog supports the keyword "local".
+ - fixed: when there was a "local" command followed by a similar "non-local"
+   command, the "non-local" one behaved as if it was "local".
+ * changed: $(var) substitution has been reworked and improved.
+ + added: set <var> ~ strexpand <s>
+
+
+ v0.7 - July 2021
+ ----------------
+ + added: now NppExec supports the "Dark Mode" of Notepad++ v8
+   (Thanks to Peter Jones for the updated icons!)
+   NppExec is still compatible with previous versions of Notepad++.
+ * changed: now NppExec supports quoted strings in the form of "abc", 'abc'
+   and `abc`.
+   This allows to pass quote characters within a quoted string: `"`, '"',
+   '"abc" `def`' and so on.
+   Now, if you want to pass a text that includes ' or ` character, you need
+   to enquote this text in a different pair of quotes. For example:
+   `'t was brillig...`, "Can't stop", "Press `Esc`", etc.
+ * changed: now NppExec's Console and the Toolbar button explicitly mention
+   "NppExec" in their names
+ + added: new menu item "Change Execute Script Font..."
+ + added: now MESSAGEBOX and INPUTBOX can accept 4th parameter 'time_ms'
+ * changed: now the InputBox can be closed by pressing Esc. When it happens,
+   the value of $(INPUT) will be empty.
+ + added: now con_colour, con_filter, env_set, npe_console, npe_noemptyvars,
+   npe_sendmsgbuflen and npp_console support a new keyword "local".
+   This new keyword means: the changes are applied locally to the current
+   NppExec's script and are reverted back when the current script ends.
+   Thus, the "local" keyword does not make sense in a single command executed
+   directly in NppExec's Console because the previous state is restored right
+   after the execution of this single "local" command, so you will not see any
+   effect of it.
+ + added: if~ <condition> - first calculates, then checks the condition
+ + added: set <var> ~ strescape <s>, set <var> ~ strunescape <s>
+ + added: file names "npes_temp.txt" and "npes_saved.txt" can be customized
+   (see "NppExec_TechInfo.txt" for details)
+ - fixed: indirect variable reference in e.g. "echo #$(i) = $(#$(i))"
+ + new advanced option "CustomMsgReady" (see "NppExec_TechInfo.txt")
+ + NppExec Manual updated
+
+
  v0.6.2 - February 2021
  ----------------------
  * changed: now NppExec uses CreateFile+FILE_FLAG_WRITE_THROUGH while writing
@@ -591,8 +717,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <functional>
 #include <iterator>
 
-#define NPPEXEC_VER_DWORD 0x06F2
-#define NPPEXEC_VER_STR   _T("0.6.2")
+#define NPPEXEC_VER_DWORD 0x08F2
+#define NPPEXEC_VER_STR   _T("0.8.2")
 
 #define SCRPTENGNID_DEBUG_OUTPUT 0
 
@@ -616,11 +742,14 @@ const COLORREF COLOR_CON_BKGND    = 0xFFFFFFFF; // means system default
 enum enumNFuncItems {
   N_DO_EXEC_DLG = 0,
   N_DIRECT_EXEC,
+  N_EXEC_SELTEXT,
+  N_EXEC_CLIPTEXT,
+  N_SEPARATOR_1,
   N_SHOWCONSOLE,
   N_TOGGLECONSOLE,
   N_GOTO_NEXT_ERROR,
   N_GOTO_PREV_ERROR,
-  N_SEPARATOR_1,
+  N_SEPARATOR_2,
   N_CMDHISTORY,
   N_CONSOLE_ENC,
 
@@ -631,12 +760,17 @@ enum enumNFuncItems {
   N_NOINTMSGS,
   N_SAVEONEXECUTE,
   N_CDCURDIR,
+
+#ifdef _DISABLE_CMD_ALIASES
   N_NOCMDALIASES,
-  N_SEPARATOR_2,
+#endif
+
+  N_SEPARATOR_3,
   N_OUTPUT_FILTER,
   N_ADV_OPTIONS,
   N_CONSOLE_FONT,
-  N_SEPARATOR_3,
+  N_EXECDLG_FONT,
+  N_SEPARATOR_4,
   N_HELP_MANUAL,
   N_HELP_DOCS,
   N_HELP_ABOUT,
@@ -662,6 +796,7 @@ enum EPluginOptions {
     OPTI_CMDHISTORY_MAXITEMS,
     OPTI_EXEC_MAXCOUNT,
     OPTI_GOTO_MAXCOUNT,
+    OPTI_EXECTEXT_MAXCOUNT,
     OPTS_ALIAS_CMD_NPPEXEC,
     OPTS_KEY_ENTER,
     OPTD_CONSOLE_NULCHAR,
@@ -682,6 +817,7 @@ enum EPluginOptions {
     OPTI_CONSOLE_CD_UNNAMEDFILE,
     OPTB_CONSOLE_CMDHISTORY,
     OPTB_CONSOLE_SAVECMDHISTORY,
+    OPTB_CONSOLE_USEEDITORCOLORS,
 
   #ifdef _SCROLL_TO_LATEST  
     OPTB_CONSOLE_SCROLL2LATEST,
@@ -689,14 +825,20 @@ enum EPluginOptions {
 
     OPTB_CONSOLE_NOINTMSGS,
     OPTB_CONSOLE_PRINTMSGREADY,
+    OPTS_CONSOLE_CUSTOMMSGREADY,
     OPTB_CONSOLE_NOEMPTYVARS,
     OPTB_CONSOLE_NOCMDALIASES,
+    OPTD_EXECDLG_FONT,
     OPTD_CONSOLE_FONT,
     OPTB_CONSOLE_APPENDMODE,
     OPTU_CONSOLE_CATCHSHORTCUTKEYS,
     OPTB_CONSOLE_SETOUTPUTVAR,
+    OPTB_CONSOLE_KILLPROCTREE,
     OPTI_CONSOLE_ANSIESCSEQ,
+    OPTI_CONSOLE_EXECCLIPTEXTMODE,
+    OPTI_CONSOLE_EXECSELTEXTMODE,
     OPTB_CONFLTR_ENABLE,
+    OPTB_CONFLTR_COMPILER_ERRORS,
     OPTB_CONFLTR_EXCLALLEMPTY,
     OPTB_CONFLTR_EXCLDUPEMPTY,
     OPTI_CONFLTR_INCLMASK,
@@ -758,6 +900,7 @@ enum EPluginOptions {
     OPTS_CONFLTR_RCGNEFF9,  // = OPTS_CONFLTR_RCGNEFF1 + 8,
     OPTS_CONFLTR_RCGNEFF10, // = OPTS_CONFLTR_RCGNEFF1 + 9,
     OPTB_WATCHSCRIPTFILE,
+    OPTB_SAVELASTSCRIPT,
 
     OPTS_FILTERS_EXCL1,
     OPTS_FILTERS_EXCL2,
@@ -1018,6 +1161,9 @@ enum EPluginOptions {
     OPTS_EXITBOX_VALUE20,
 
     OPTS_PLUGIN_HELPFILE,
+    OPTS_PLUGIN_TEMPSCRIPTFILE,
+    OPTS_PLUGIN_LASTSCRIPTFILE,
+    OPTS_PLUGIN_SAVEDSCRIPTSFILE,
     OPTS_PLUGIN_LOGSDIR,
     OPTS_PLUGIN_SCRIPTSDIR,
     OPTU_PLUGIN_AUTOSAVE_SECONDS,
@@ -1027,6 +1173,7 @@ enum EPluginOptions {
 
 class CScriptEngine;
 class CNppExec;
+class CInputBoxDlg;
 
 class CNppConsoleRichEdit : public CAnyRichEdit
 {
@@ -1070,6 +1217,7 @@ public:
     COLORREF GetCurrentColorTextMsg() const;
     COLORREF GetCurrentColorTextErr() const;
     COLORREF GetCurrentColorBkgnd() const;
+    HBRUSH   GetCurrentBkgndBrush() const { return m_hBkgndBrush; }
 
     void SetCurrentColorTextNorm(COLORREF colorTextNorm);
     void SetCurrentColorTextMsg(COLORREF colorTextMsg);
@@ -1077,15 +1225,20 @@ public:
     void SetCurrentColorBkgnd(COLORREF colorBkgnd);
 
     // print...
-    void PrintError(LPCTSTR cszMessage, bool bLogThisMsg = true);
-    void PrintMessage(LPCTSTR cszMessage, bool bIsInternalMsg = true, bool bLogThisMsg = true);
-    void PrintOutput(LPCTSTR cszMessage, bool bNewLine = true, bool bLogThisMsg = true);
-    void PrintStr(LPCTSTR cszStr, bool bNewLine, bool bLogThisMsg = true);
-    void PrintSysError(LPCTSTR cszFunctionName, DWORD dwErrorCode, bool bLogThisMsg = true);
+    enum ePrintFlags {
+        pfLogThisMsg    = 0x01,
+        pfNewLine       = 0x02,
+        pfIsInternalMsg = 0x04
+    };
+    void PrintError(LPCTSTR cszMessage, UINT nPrintFlags = pfLogThisMsg);
+    void PrintMessage(LPCTSTR cszMessage, UINT nPrintFlags);
+    void PrintOutput(LPCTSTR cszMessage, UINT nPrintFlags = pfLogThisMsg|pfNewLine);
+    void PrintStr(LPCTSTR cszStr, UINT nPrintFlags = pfLogThisMsg|pfNewLine);
+    void PrintSysError(LPCTSTR cszFunctionName, DWORD dwErrorCode, UINT nPrintFlags = pfLogThisMsg);
 
     void LockConsolePos(INT nPos, bool bForce = false);
     void LockConsoleEndPos(bool bForce = false);
-    void LockConsoleEndPosAfterEnterPressed();
+    void LockConsoleEndPosAfterEnterPressed(bool bForce = false);
 
     // get/set...
     CAnyRichEdit& GetConsoleEdit();
@@ -1104,9 +1257,11 @@ public:
 
     // other...
     void ClearText(bool bForce = false);
+    void ClearCurrentInput();
     BOOL IsScrollToEnd() const;
     void RestoreDefaultTextStyle(bool bLockPos);
     void UpdateColours();
+    void ApplyEditorColours(bool bCanUpdateColours);
 
     // special characters...
     void ProcessSlashR(); // "\r"
@@ -1154,7 +1309,8 @@ protected:
     // data...
     //CNppExec* m_pNppExec;
     CNppConsoleRichEdit m_reConsole;
-    HWND m_hDlg;
+    HWND     m_hDlg;
+    HBRUSH   m_hBkgndBrush;
     COLORREF m_colorTextNorm;
     COLORREF m_colorTextMsg;
     COLORREF m_colorTextErr;
@@ -1176,11 +1332,11 @@ protected:
     void _setCurrentColorTextErr(COLORREF colorTextErr);
     void _setCurrentColorBkgnd(COLORREF colorBkgnd);
 
-    void _printError(ScriptEngineId scrptEngnId, LPCTSTR cszMessage, bool bLogThisMsg);
-    void _printMessage(ScriptEngineId scrptEngnId, LPCTSTR cszMessage, bool bIsInternalMsg, bool bLogThisMsg);
-    void _printOutput(ScriptEngineId scrptEngnId, LPCTSTR cszMessage, bool bNewLine, bool bLogThisMsg);
-    void _printStr(ScriptEngineId scrptEngnId, LPCTSTR cszStr, bool bNewLine, bool bLogThisMsg);
-    void _printSysError(ScriptEngineId scrptEngnId, LPCTSTR cszFunctionName, DWORD dwErrorCode, bool bLogThisMsg);
+    void _printError(ScriptEngineId scrptEngnId, LPCTSTR cszMessage, UINT nPrintFlags);
+    void _printMessage(ScriptEngineId scrptEngnId, LPCTSTR cszMessage, UINT nPrintFlags);
+    void _printOutput(ScriptEngineId scrptEngnId, LPCTSTR cszMessage, UINT nPrintFlags);
+    void _printStr(ScriptEngineId scrptEngnId, LPCTSTR cszStr, UINT nPrintFlags);
+    void _printSysError(ScriptEngineId scrptEngnId, LPCTSTR cszFunctionName, DWORD dwErrorCode, UINT nPrintFlags);
 
     void _lockConsolePos(ScriptEngineId scrptEngnId, INT nPos);
     void _lockConsoleEndPos(ScriptEngineId scrptEngnId);
@@ -1230,20 +1386,25 @@ public:
     CCriticalSection& GetCsCmdAliases();
 
     // check macro vars...
-    static void CheckCmdArgs(tstr& Cmd, const CStrSplitT<TCHAR>& args);
+    static bool CheckCmdArgs(tstr& Cmd, int& pos, const CStrSplitT<TCHAR>& args);
     void        CheckCmdAliases(tstr& S, bool useLogging);
-    void        CheckNppMacroVars(tstr& S);
-    void        CheckPluginMacroVars(tstr& S);
-    bool        CheckUserMacroVars(CScriptEngine* pScriptEngine, tstr& S, int nCmdType = 0);
-    static void CheckEmptyMacroVars(tstr& S, int nCmdType = 0);
+    bool        CheckNppMacroVars(tstr& S, int& pos);
+    bool        CheckPluginMacroVars(tstr& S, int& pos);
+    bool        CheckUserMacroVars(CScriptEngine* pScriptEngine, tstr& S, int& pos);
+    static bool CheckEmptyMacroVars(tstr& S, int& pos);
     bool        CheckAllMacroVars(CScriptEngine* pScriptEngine, tstr& S, bool useLogging, int nCmdType = 0);
-    bool        CheckInnerMacroVars(CScriptEngine* pScriptEngine, tstr& S, bool useLogging);
+    bool        CheckInnerMacroVars(CScriptEngine* pScriptEngine, tstr& S, int& pos, bool useLogging);
     bool        SetUserMacroVar(CScriptEngine* pScriptEngine, tstr& varName, const tstr& varValue, unsigned int nFlags = 0);
 
     static void MakeCompleteVarName(tstr& varName);
 
 protected:
-    void substituteMacroVar(tstr& Cmd, tstr& S, const TCHAR* varName, 
+    static void logInput(const TCHAR* funcName, const TCHAR* inputVar, int pos);
+    static void logInput(const TCHAR* funcName, const TCHAR* inputVar);
+    static void logOutput(const TCHAR* outputVar);
+    static void logNoOutput();
+    bool substituteMacroVar(const tstr& Cmd, tstr& S, int& pos,
+                            const TCHAR* varName,
                             tstr (*getValue)(CNppExec* pNppExec) );
 
 public:
@@ -1263,6 +1424,9 @@ public:
             CT_STRREPLACE,
             CT_STRQUOTE,
             CT_STRUNQUOTE,
+            CT_STRESCAPE,
+            CT_STRUNESCAPE,
+            CT_STREXPAND,
             CT_NORMPATH,
             CT_STRFROMHEX,
             CT_STRTOHEX,
@@ -1290,6 +1454,8 @@ public:
         bool calcChr();
         bool calcOrd();
         bool calcStrQuote();
+        bool calcStrEscape();
+        bool calcStrExpand();
         bool calcNormPath();
 
     protected:
@@ -1327,6 +1493,7 @@ private:
   CNppExecConsole m_Console;
   CNppExecMacroVars m_MacroVars;
   CListT<tstr> m_ScriptCmdList;
+  CListT<tstr> m_LastSavedCmdList;
 
   TCHAR   m_szPluginDllPath[FILEPATH_BUFSIZE];
   TCHAR   m_szConfigPath[FILEPATH_BUFSIZE];
@@ -1345,7 +1512,10 @@ private:
   HWND    getCurrentScintilla(INT which);
 
 public:
-  toolbarIcons    m_TB_Icon;
+  typedef int (WINAPI *MSGBOXTIMEOUTFUNC)(HWND hWnd, LPCTSTR lpText, LPCTSTR lpCaption, UINT uType, WORD wLanguageId, DWORD dwMilliseconds);
+
+  toolbarIcons             m_TB_Icons;
+  toolbarIconsWithDarkMode m_TB_IconsWithDarkMode;
     
   HMODULE         m_hDllModule;
   NppData         m_nppData;
@@ -1360,6 +1530,11 @@ public:
 
   int             npp_nbFiles;
   CBufT<TCHAR*>   npp_bufFileNames;
+
+  MSGBOXTIMEOUTFUNC m_lpMsgBoxTimeoutFunc;
+
+  CFileModificationWatcher m_FileWatcher;
+  CNppScriptFileChangeListener m_ScriptFileChangeListener;
   
 public:
   static bool     _bIsNppReady;
@@ -1367,10 +1542,32 @@ public:
   bool            _bStopTheExitScript;
   bool            _bOptionsSavedOnNppnShutdown;
 
+  HFONT           _execdlgFont;
   HFONT           _consoleFont;
   bool            _consoleIsVisible;
   bool            _consoleCommandBreak;
   bool            _consoleCommandIsRunning;
+
+public:
+  enum eTextEnc {
+    encAsIs = 0,
+    encANSI,
+    encUTF8_BOM,
+    encUTF8_NoBOM,
+    encUCS2LE
+  };
+
+  enum eExecTextFlags {
+    etfNone                    = 0,
+    etfMacroVarsNoChildProc    = 0x01,
+    etfMacroVarsWithChildProc  = 0x02,
+    etfCollateralNoChildProc   = 0x04,
+    etfCollateralWithChildProc = 0x08,
+    etfNppExecPrefix           = 0x10,
+    etfLastScript              = 0x20,
+    etfShareLocalVars          = 0x40,
+    etfShareConsoleState       = 0x80
+  };
 
 public:
   CNppExec();
@@ -1379,6 +1576,7 @@ public:
   CSimpleLogger& GetLogger() { return m_Logger; }
   CWarningAnalyzer& GetWarningAnalyzer() { return m_WarningAnalyzer; }
   CStaticOptionsManager& GetOptions() { return m_Options; }
+  const CStaticOptionsManager& GetOptions() const { return m_Options; }
 
   CListT<tstr> GetCmdList() const;
   void SetCmdList(const CListT<tstr>& CmdList);
@@ -1389,6 +1587,9 @@ public:
   int  textLoadFrom(LPCTSTR cszFile, bool bSelectionOnly); // returns -1 if can't load
   int  textSaveTo(LPTSTR szFileAndEncoding, bool bSelectionOnly); // returns -1 if can't save
   void textSetText(LPCTSTR cszText, bool bSelectionOnly);
+  char* sciGetText(bool bSelectionOnly, int* pnTextLen, int* pnSciCodePage);
+  tstr  sciGetSelText();
+  static char* convertSciText(char* pSciText, int nTextLen, int nSciCodePage, eTextEnc outEnc, int* pnOutLen);
   int  nppConvertToFullPathName(tstr& fileName, bool bGetOpenFileNames, int nView = ALL_OPEN_FILES);
   int  nppGetMenuItemIdByName(const tstr& menuItemPathName, tstr& parsedPath, tstr& parsedSep);
   int  nppGetOpenFileNames();
@@ -1405,36 +1606,35 @@ public:
   static void CreateCloudDirIfNeeded(const tstr& cloudDir);
 
 private:
-  bool SendChildProcessExitCommand();
-  bool ShowChildProcessExitDialog();
   void SaveConfiguration();
   
 public: 
-  enum eCanStartFlags {
-    sfDoNotShowExitDialog      = 0x01,
-    sfDoNotShowWarningOnScript = 0x02
-  };
-  bool CanStartScriptOrCommand(unsigned int nFlags = 0);
-  bool TryExitRunningChildProcess(unsigned int nFlags = 0);
-
   void InitPluginName(HMODULE hDllModule); // called _before_ Init()
   void Init();
   void Uninit();
   void OnCmdHistory();
   void OnDoExecDlg();
   void OnDirectExec(const tstr& id, bool bCanSaveAll, unsigned int nRunFlags = 0);
+  void OnExecSelText();
+  void OnExecClipText();
   void OnConsoleEncoding();
   void OnSaveOnExecute();
   void OnCdCurDir();
   void OnNoInternalMsgs();
+
+#ifdef _DISABLE_CMD_ALIASES
   void OnNoCmdAliases();
+#endif
+
   void OnOutputFilter();
   void OnAdvancedOptions();
   void OnSelectConsoleFont();
+  void OnSelectExecDlgFont();
   void OnUserMenuItem(int nItemNumber);
 
   void DoExecScript(const tstr& id, LPCTSTR szScriptName, bool bCanSaveAll, LPCTSTR szScriptArguments = NULL, unsigned int nRunFlags = 0);
   void DoRunScript(const CListT<tstr>& CmdList, unsigned int nRunFlags = 0);
+  void DoExecText(const tstr& sText, unsigned int nExecTextMode);
 
   void RunTheStartScript();
   void RunTheExitScript();
@@ -1454,13 +1654,19 @@ public:
   void SaveOptions();
   void StartAutoSaveTimer();
   void StopAutoSaveTimer();
-  void SaveScripts();
+
+  enum eSaveScriptsFlags {
+      ssfSaveLastScript = 0x01
+  };
+  void SaveScripts(unsigned int nSaveFlags);
+  
   HWND GetScintillaHandle();
   HMENU GetNppMainMenu();
   void SetConsoleFont(HWND hEd, const LOGFONT* plf);
   void ShowError(LPCTSTR szMessage);
   void ShowWarning(LPCTSTR szMessage);
   INT_PTR PluginDialogBox(UINT idDlg, DLGPROC lpDlgProc);
+  CInputBoxDlg& GetInputBoxDlg();
 
   tstr ExpandToFullConfigPath(const TCHAR* cszFileName, bool bTryCloud = false);
 
@@ -1488,6 +1694,7 @@ public:
   eDlgExistResult verifyConsoleDialogExists();
   bool isConsoleDialogVisible();
   void UpdateConsoleEncoding();
+  void updateConsoleEncodingFlags();
   
   void printConsoleHelpInfo();
 
@@ -1514,7 +1721,10 @@ namespace Runtime
     CSimpleLogger& GetLogger();
 };
 
-extern const TCHAR SCRIPTFILE_SAVED[];
+extern TCHAR SCRIPTFILE_TEMP[100];
+extern TCHAR SCRIPTFILE_LAST[100];
+extern TCHAR SCRIPTFILE_SAVED[100];
+extern TCHAR CMDHISTORY_FILENAME[100];
 
 
 //--------------------------------------------------------------------

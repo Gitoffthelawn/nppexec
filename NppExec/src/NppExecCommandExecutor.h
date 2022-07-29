@@ -137,15 +137,16 @@ public:
 
     enum eRunFlags : unsigned int
     {
-        rfShareLocalVars        = 0x0001, // can't be mixed with rfConsoleLocalVars
-        rfConsoleLocalVarsRead  = 0x0002, // can't be mixed with rfShareLocalVars
-        rfConsoleLocalVarsWrite = 0x0004, // can't be mixed with rfShareLocalVars
+        rfShareLocalVars        = 0x0001, // share LocalMacroVars; can't be mixed with rfConsoleLocalVars
+        rfConsoleLocalVarsRead  = 0x0002, // read UserConsoleMacroVars; can't be mixed with rfShareLocalVars
+        rfConsoleLocalVarsWrite = 0x0004, // write UserConsoleMacroVars; can't be mixed with rfShareLocalVars
         rfConsoleLocalVars      = (rfConsoleLocalVarsRead | rfConsoleLocalVarsWrite),
         rfShareConsoleState     = 0x0008, // share the OutputEnabled state
         rfCollateralScript      = 0x0010, // is running as a collateral script
         rfStartScript           = 0x0020, // is running on start (NPPN_READY)
         rfExitScript            = 0x0040, // is running on exit (NPPN_SHUTDOWN)
-        rfExternal              = 0x0100  // initiated by external plugin
+        rfExternal              = 0x0100, // initiated by external plugin
+        rfShareConsoleLocalVars = 0x0200  // can be combined with rfShareLocalVars
     };
 
 public:
@@ -435,13 +436,24 @@ public:
     bool GetTriedExitCmd() const;
     void SetTriedExitCmd(bool bTriedExitCmd);
 
-    void ExecuteChildProcessCommand(tstr& cmd);
+    void ExecuteChildProcessCommand(tstr& cmd, bool bSubstituteMacroVars, bool bForceLockEndPos = false);
     bool WriteChildProcessInput(const TCHAR* szLine, bool bFFlush = false);
 
     void ChildProcessMustBreak(unsigned int nBreakMethod); // about to break the current child process
     void ChildProcessMustBreakAll(unsigned int nBreakMethod); // about to break all child processes
 
+    enum eCanStartFlags {
+        sfDoNotShowExitDialog      = 0x01,
+        sfDoNotShowWarningOnScript = 0x02
+    };
+    bool CanStartScriptOrCommand(unsigned int nFlags = 0);
+    bool TryExitRunningChildProcess(unsigned int nFlags = 0);
+
     bool WaitUntilAllScriptEnginesDone(DWORD dwTimeoutMs);
+
+private:
+    bool SendChildProcessExitCommand();
+    bool ShowChildProcessExitDialog();
 
 private:
     static DWORD WINAPI BackgroundExecuteThreadFunc(LPVOID lpParam);

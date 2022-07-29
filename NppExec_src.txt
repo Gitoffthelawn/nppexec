@@ -1,5 +1,6 @@
 NppExec_build_*.bat
 NppExec_zip_*.bat
+NppExec_*.py
 NppExec_src.txt
 .gitignore
 README.md
@@ -19,7 +20,8 @@ NppExec\doc\NppExec\NppExec_Manual\*.hhp
 NppExec\doc\NppExec\*.html
 NppExec\doc\NppExec\*.css
 NppExec\doc\NppExec\*.png
-NppExec\src\ConsoleIcon.*
+NppExec\src\*.bmp
+NppExec\src\*.ico
 NppExec\src\Console*.txt
 NppExec\src\*.cpp
 NppExec\src\*.h
@@ -37,6 +39,7 @@ NppExec\src\fparser\*.*
 NppExec\src\fparser\docs\*.*
 NppExec\src\fparser\extrasrc\*.*
 NppExec\src\fparser\mpfr\*.*
+NppExec\src\npp_files\*.h
 NppExec\src\PluginCommunication\*.cpp
 NppExec\src\PluginCommunication\*.h
 NppExec\Release\NppExec\*.h
@@ -48,4 +51,4 @@ NppExecPluginMsgTester\src\*.cpp
 NppExecPluginMsgTester\src\*.h
 NppExecPluginMsgTester\src\core\*.cpp
 NppExecPluginMsgTester\src\core\*.h
-NppExecPluginMsgTester\src\core\npp_stuff\*.h
+NppExecPluginMsgTester\src\core\npp_files\*.h

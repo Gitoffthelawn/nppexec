@@ -31,8 +31,8 @@ const TCHAR* NpeSearchFlagsList[] = {
   _T("NPE_SF_CXX11REGEX"),
   _T("NPE_SF_BACKWARD"),
   _T("NPE_SF_NEXT"),
+  _T("NPE_SF_INENTIRETEXT"),
   _T("NPE_SF_INSELECTION"),
-  _T("NPE_SF_INWHOLETEXT"),
   _T("NPE_SF_SETPOS"),
   _T("NPE_SF_SETSEL"),
   _T("NPE_SF_REPLACEALL"),
@@ -52,6 +52,7 @@ const TCHAR* VariablesList[] = {
   MACRO_CURRENT_COLUMN,        //  $(CURRENT_COLUMN)
   MACRO_FILE_DIRPATH,          //  $(CURRENT_DIRECTORY)
   MACRO_CURRENT_LINE,          //  $(CURRENT_LINE)
+  MACRO_CURRENT_LINESTR,       //  $(CURRENT_LINESTR)
   MACRO_CURRENT_WORD,          //  $(CURRENT_WORD)
   MACRO_CURRENT_WORKING_DIR,   //  $(CWD)
   MACRO_EXITCODE,              //  $(EXITCODE)
@@ -62,6 +63,7 @@ const TCHAR* VariablesList[] = {
   MACRO_FILE_FULLPATH,         //  $(FULL_CURRENT_PATH)
   MACRO_INPUT,                 //  $(INPUT)
   _T("$(INPUT[1])"),           //  $(INPUT[1])
+  MACRO_IS_PROCESS,            //  $(IS_PROCESS)
   MACRO_LAST_CMD_RESULT,       //  $(LAST_CMD_RESULT)
   MACRO_LEFT_VIEW_FILE,        //  $(LEFT_VIEW_FILE)
   MACRO_MSG_LPARAM,            //  $(MSG_LPARAM)
@@ -80,11 +82,18 @@ const TCHAR* VariablesList[] = {
   _T("$(RARGV[1])"),           //  $(RARGV[1])
   MACRO_RIGHT_VIEW_FILE,       //  $(RIGHT_VIEW_FILE)
   MACRO_SCI_HWND,              //  $(SCI_HWND)
+  MACRO_SCI_HWND1,             //  $(SCI_HWND1)
+  MACRO_SCI_HWND2,             //  $(SCI_HWND2)
+  MACRO_SELECTED_TEXT,         //  $(SELECTED_TEXT)
   _T("$(SYS.PATH)"),           //  $(SYS.PATH)
   MACRO_WORKSPACE_ITEM_DIR,    //  $(WORKSPACE_ITEM_DIR)
   MACRO_WORKSPACE_ITEM_NAME,   //  $(WORKSPACE_ITEM_NAME)
   MACRO_WORKSPACE_ITEM_PATH,   //  $(WORKSPACE_ITEM_PATH)
   MACRO_WORKSPACE_ITEM_ROOT    //  $(WORKSPACE_ITEM_ROOT)
+};
+
+const TCHAR* DirectivesList[] = {
+  DIRECTIVE_COLLATERAL
 };
 
 CPopupListBox::CPopupListBox() : CAnyListBox()
@@ -142,7 +151,7 @@ bool CPopupListBox::FillPopupList(const TCHAR* szCurrentWord)
 
     WordUpper = szCurrentWord;
     NppExecHelpers::StrUpper(WordUpper);
-    
+
     if ( ((nLen >= 3) && 
           (WordUpper.StartsWith(_T("NPP")) || 
            WordUpper.StartsWith(_T("CON")) ||
@@ -207,7 +216,7 @@ bool CPopupListBox::FillPopupList(const TCHAR* szCurrentWord)
               const TCHAR ch = szCurrentWord[0];
               if ((ch >= _T('A')) && (ch <= _T('Z')))
               {
-                AddString(S.c_str());; // flags can be in upper case only
+                AddString(S.c_str()); // flags can be in upper case only
               }
             }
             else
@@ -224,7 +233,7 @@ bool CPopupListBox::FillPopupList(const TCHAR* szCurrentWord)
       }
       return ((GetCount() > 0) ? true : false);
     }
-    
+
     if ((nLen >= 2) && (WordUpper.StartsWith(_T("$("))))
     {
       bExactMatch = false;
@@ -250,7 +259,38 @@ bool CPopupListBox::FillPopupList(const TCHAR* szCurrentWord)
       }
       return ((GetCount() > 0) ? true : false);
     }
-    
+
+    if ((nLen >= 2) && WordUpper.StartsWith(_T("!")))
+    {
+      bExactMatch = false;
+      for (const TCHAR* const& d : DirectivesList)
+      {
+        S = d;
+        if (S.StartsWith(WordUpper))
+        {
+          if (S != WordUpper)
+          {
+            const TCHAR ch = szCurrentWord[1];
+            if ((ch >= _T('a')) && (ch <= _T('z')))
+            {
+              NppExecHelpers::StrLower(S); // preserve lower case
+            }
+            AddString(S.c_str());
+          }
+          else
+          {
+            bExactMatch = true;
+            break;
+          }
+        }
+      }
+      if (bExactMatch)
+      {
+        ResetContent();
+      }
+      return ((GetCount() > 0) ? true : false);
+    }
+
   }
   return false;
 }

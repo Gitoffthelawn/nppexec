@@ -6,15 +6,17 @@
 #define IDD_CONSOLE                             102
 #define IDD_SCRIPTNAME                          103
 #define IDD_HELP_ABOUT                          104
-#define IDI_CONSOLEICON                         105
 #define IDD_CONSOLE_FILTER                      106
 #define IDD_CONSOLE_OUTPUTFILTER                107
 #define IDD_CONSOLE_REPLACEFILTER               108
 #define IDD_CONSOLE_HIGHLIGHTFILTER             109
-#define IDI_CONSOLEBITMAP                       110
 #define IDD_ADVANCEDOPTIONS                     111
 #define IDD_INPUTBOX                            112
 #define IDD_CONSOLE_ENCODING                    113
+
+#define IDI_CONSOLEICON                         121
+#define IDI_CONSOLEICONDARK                     122
+#define IDI_CONSOLEBITMAP                       123
 
 #define IDC_ED_CMDLINE                          1001
 #define IDC_RE_CONSOLE                          1002
@@ -38,6 +40,7 @@
 #define IDC_BOLD                                1022
 #define IDC_UNDERLINED                          1023
 #define IDC_BT_DONATE                           1025
+#define IDC_ST_HOME_ADDR                        1026
 
 #define IDC_CH_INCLUDE1                         1031
 #define IDC_CH_INCLUDE2                         1032
@@ -236,6 +239,7 @@
 #define IDC_ED_OPT_TEXTCOLORMSG                 1345
 #define IDC_ST_OPT_BKCOLOR                      1346
 #define IDC_ED_OPT_BKCOLOR                      1347
+#define IDC_CH_OPT_USEEDITORCOLORS              1348
 
 #define IDC_ST_VARMESSAGE                       1380
 #define IDC_ST_VARNAME                          1381

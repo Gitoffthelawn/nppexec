@@ -555,6 +555,26 @@ namespace NppExecHelpers
         ::CharUpper( S );
     }
 
+    TCHAR LatinCharUpper(TCHAR ch)
+    {
+        if ( ch >= _T('a') && ch <= _T('z') )
+        {
+            ch -= _T('a');
+            ch += _T('A');
+        }
+        return ch;
+    }
+
+    TCHAR LatinCharLower(TCHAR ch)
+    {
+        if ( ch >= _T('A') && ch <= _T('Z') )
+        {
+            ch -= _T('A');
+            ch += _T('a');
+        }
+        return ch;
+    }
+
     void StrQuote(tstr& S)
     {
         if ( IsStrNotQuoted(S) )
@@ -573,14 +593,139 @@ namespace NppExecHelpers
         }
     }
 
+    void StrUnquoteEx(tstr& S)
+    {
+        if ( IsStrQuotedEx(S) )
+        {
+            S.DeleteLastChar();
+            S.DeleteFirstChar();
+        }
+    }
+
     bool IsStrQuoted(const tstr& S)
     {
         return ( (S.length() > 1) && (S.GetFirstChar() == _T('\"')) && (S.GetLastChar() == _T('\"')) );
     }
 
+    bool IsStrQuotedEx(const tstr& S)
+    {
+        if ( S.length() > 1 )
+        {
+            const tstr::value_type firstChar = S.GetFirstChar();
+            if ( firstChar == _T('\"') || firstChar == _T('\'') || firstChar == _T('`') )
+                return ( firstChar == S.GetLastChar() );
+        }
+        return false;
+    }
+
     bool IsStrNotQuoted(const tstr& S)
     {
-        return ( (S.GetFirstChar() != _T('\"')) && (S.GetLastChar()  != _T('\"')) );
+        return ( S.GetFirstChar() != _T('\"') && S.GetLastChar() != _T('\"') );
+    }
+
+    bool IsStrNotQuotedEx(const tstr& S)
+    {
+        const tstr::value_type firstChar = S.GetFirstChar();
+        const tstr::value_type lastChar = S.GetLastChar();
+        return ( firstChar != _T('\"') && lastChar != _T('\"') &&
+                 firstChar != _T('\'') && lastChar != _T('\'') &&
+                 firstChar != _T('`')  && lastChar != _T('`') );
+    }
+
+    void StrEscape(tstr& S)
+    {
+        tstr R;
+        R.Reserve(2 * S.length());
+
+        const TCHAR* p = S.c_str();
+        TCHAR ch;
+
+        while ( (ch = *p) != 0 )
+        {
+            switch ( ch )
+            {
+                case _T('\n'):
+                    R += _T('\\');
+                    R += _T('n');
+                    break;
+                case _T('\r'):
+                    R += _T('\\');
+                    R += _T('r');
+                    break;
+                case _T('\t'):
+                    R += _T('\\');
+                    R += _T('t');
+                    break;
+                case _T('\\'):
+                    R += _T('\\');
+                    R += _T('\\');
+                    break;
+                case _T('"'):
+                    R += _T('\\');
+                    R += _T('"');
+                    break;
+                default:
+                    R += ch;
+                    break;
+            }
+
+            ++p;
+        }
+
+        S.Swap(R);
+    }
+
+    void StrUnescape(tstr& S)
+    {
+        if ( S.Find(_T('\\')) >= 0 )
+        {
+            tstr R;
+            R.Reserve(S.length());
+
+            const TCHAR* p = S.c_str();
+            TCHAR ch;
+
+            while ( (ch = *p) != 0 )
+            {
+                if ( ch == _T('\\') )
+                {
+                    switch ( *(p + 1) )
+                    {
+                        case _T('n'):
+                            R += _T('\n');
+                            ++p;
+                            break;
+                        case _T('r'):
+                            R += _T('\r');
+                            ++p;
+                            break;
+                        case _T('t'):
+                            R += _T('\t');
+                            ++p;
+                            break;
+                        case _T('\\'):
+                            R += _T('\\');
+                            ++p;
+                            break;
+                        case 0:
+                            // trailing '\'
+                            R += _T('\\');
+                            break;
+                        default:
+                            // e.g. '\q' becomes 'q'
+                            break;
+                    }
+                }
+                else
+                {
+                    R += ch;
+                }
+
+                ++p;
+            }
+
+            S.Swap(R);
+        }
     }
 
     int StrCmpNoCase(const tstr& S1, const tstr& S2)
@@ -641,6 +786,46 @@ namespace NppExecHelpers
     {
         int i = S.length() - 1;
         while ( IsTabSpaceChar(S.GetAt(i)) )
+        {
+            --i;
+        }
+        S.Delete(i + 1, -1);
+    }
+
+    void StrDelLeadingAnySpaces(CStrT<char>& S)
+    {
+        int i = 0;
+        while ( IsAnySpaceChar(S.GetAt(i)) )
+        {
+            ++i;
+        }
+        S.Delete(0, i);
+    }
+
+    void StrDelLeadingAnySpaces(CStrT<wchar_t>& S)
+    {
+        int i = 0;
+        while ( IsAnySpaceChar(S.GetAt(i)) )
+        {
+            ++i;
+        }
+        S.Delete(0, i);
+    }
+
+    void StrDelTrailingAnySpaces(CStrT<char>& S)
+    {
+        int i = S.length() - 1;
+        while ( IsAnySpaceChar(S.GetAt(i)) )
+        {
+            --i;
+        }
+        S.Delete(i + 1, -1);
+    }
+
+    void StrDelTrailingAnySpaces(CStrT<wchar_t>& S)
+    {
+        int i = S.length() - 1;
+        while ( IsAnySpaceChar(S.GetAt(i)) )
         {
             --i;
         }

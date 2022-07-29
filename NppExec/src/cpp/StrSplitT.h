@@ -4,6 +4,35 @@
 #include "CStrT.h"
 #include "CListT.h"
 
+namespace StrSplitT
+{
+    inline bool is_any_space_char(char ch)
+    {
+        switch ( ch )
+        {
+            case ' ':
+            case '\t':
+            case '\v':
+            case '\f':
+                return true;
+        }
+        return false;
+    }
+
+    inline bool is_any_space_char(wchar_t ch)
+    {
+        switch ( ch )
+        {
+            case L' ':
+            case L'\t':
+            case L'\v':
+            case L'\f':
+                return true;
+        }
+        return false;
+    }
+}
+
 // split to args, considering quotes
 template <class T> int StrSplitToArgs(const T* str,
   CListT< CStrT<T> >& outList, int max_items = 0)
@@ -14,31 +43,60 @@ template <class T> int StrSplitToArgs(const T* str,
         const int MODE_TABSPACE  = 0;
         const int MODE_CHARACTER = 1;
         const int MODE_DBLQUOTES = 2;
+        const int MODE_SGLQUOTE1 = 3;
+        const int MODE_SGLQUOTE2 = 4;
         const T   CHAR_DBLQUOTES = '\"';
-        const T   CHAR_SPACE     = ' ';
-        const T   CHAR_TAB       = '\t';
+        const T   CHAR_SGLQUOTE1 = '\'';
+        const T   CHAR_SGLQUOTE2 = '`';
 
         int      mode = MODE_TABSPACE;
         CStrT<T> S;
 
         while ( *str )
         {
+            const T ch = *str;
             if ( mode == MODE_DBLQUOTES )
             {
-                if ( *str == CHAR_DBLQUOTES )
+                if ( ch == CHAR_DBLQUOTES )
                 {
                     mode = MODE_CHARACTER;
                 }
                 else
                 {
-                    S.Append( *str );
+                    S.Append( ch );
+                }
+                ++str;
+                continue;
+            }
+            if ( mode == MODE_SGLQUOTE1 )
+            {
+                if ( ch == CHAR_SGLQUOTE1 )
+                {
+                    mode = MODE_CHARACTER;
+                }
+                else
+                {
+                    S.Append( ch );
+                }
+                ++str;
+                continue;
+            }
+            if ( mode == MODE_SGLQUOTE2 )
+            {
+                if ( ch == CHAR_SGLQUOTE2 )
+                {
+                    mode = MODE_CHARACTER;
+                }
+                else
+                {
+                    S.Append( ch );
                 }
                 ++str;
                 continue;
             }
             if ( mode == MODE_TABSPACE )
             {
-                if ( (*str == CHAR_SPACE) || (*str == CHAR_TAB) )
+                if ( StrSplitT::is_any_space_char(ch) )
                 {
                     ++str;
                     continue;
@@ -57,11 +115,19 @@ template <class T> int StrSplitToArgs(const T* str,
                 }
             }
             
-            if ( *str == CHAR_DBLQUOTES )
+            if ( ch == CHAR_DBLQUOTES )
             {
                 mode = MODE_DBLQUOTES;
             }
-            else if ( (*str == CHAR_SPACE) || (*str == CHAR_TAB) )
+            else if ( ch == CHAR_SGLQUOTE1 )
+            {
+                mode = MODE_SGLQUOTE1;
+            }
+            else if ( ch == CHAR_SGLQUOTE2 )
+            {
+                mode = MODE_SGLQUOTE2;
+            }
+            else if ( StrSplitT::is_any_space_char(ch) )
             {
                 mode = MODE_TABSPACE;
                 outList.Add( S );
@@ -69,7 +135,7 @@ template <class T> int StrSplitToArgs(const T* str,
             }
             else
             {
-                S.Append( *str );
+                S.Append( ch );
             }
             ++str;
         }
@@ -91,9 +157,11 @@ template <class T> int StrSplitAsArgs(const T* str,
         const int MODE_TABSPACE  = 0;
         const int MODE_CHARACTER = 1;
         const int MODE_DBLQUOTES = 2;
+        const int MODE_SGLQUOTE1 = 3;
+        const int MODE_SGLQUOTE2 = 4;
         const T   CHAR_DBLQUOTES = '\"';
-        const T   CHAR_SPACE     = ' ';
-        const T   CHAR_TAB       = '\t';
+        const T   CHAR_SGLQUOTE1 = '\'';
+        const T   CHAR_SGLQUOTE2 = '`';
 
         int      n = 0;
         int      mode = MODE_TABSPACE;
@@ -101,15 +169,44 @@ template <class T> int StrSplitAsArgs(const T* str,
 
         while ( *str )
         {
+            const T ch = *str;
             if ( mode == MODE_DBLQUOTES )
             {
-                if ( *str == CHAR_DBLQUOTES )
+                if ( ch == CHAR_DBLQUOTES )
                 {
                     mode = MODE_CHARACTER;
                 }
                 else
                 {
-                    S.Append( *str );
+                    S.Append( ch );
+                    n = S.length(); // to keep quoted spaces, if any
+                }
+                ++str;
+                continue;
+            }
+            if ( mode == MODE_SGLQUOTE1 )
+            {
+                if ( ch == CHAR_SGLQUOTE1 )
+                {
+                    mode = MODE_CHARACTER;
+                }
+                else
+                {
+                    S.Append( ch );
+                    n = S.length(); // to keep quoted spaces, if any
+                }
+                ++str;
+                continue;
+            }
+            if ( mode == MODE_SGLQUOTE2 )
+            {
+                if ( ch == CHAR_SGLQUOTE2 )
+                {
+                    mode = MODE_CHARACTER;
+                }
+                else
+                {
+                    S.Append( ch );
                     n = S.length(); // to keep quoted spaces, if any
                 }
                 ++str;
@@ -117,7 +214,7 @@ template <class T> int StrSplitAsArgs(const T* str,
             }
             if ( mode == MODE_TABSPACE )
             {
-                if ( (*str == CHAR_SPACE) || (*str == CHAR_TAB) )
+                if ( StrSplitT::is_any_space_char(ch) )
                 {
                     ++str;
                     continue;
@@ -136,16 +233,24 @@ template <class T> int StrSplitAsArgs(const T* str,
                 }
             }
             
-            if ( *str == CHAR_DBLQUOTES )
+            if ( ch == CHAR_DBLQUOTES )
             {
                 mode = MODE_DBLQUOTES;
             }
-            else if ( *str == sep )
+            else if ( ch == CHAR_SGLQUOTE1 )
+            {
+                mode = MODE_SGLQUOTE1;
+            }
+            else if ( ch == CHAR_SGLQUOTE2 )
+            {
+                mode = MODE_SGLQUOTE2;
+            }
+            else if ( ch == sep )
             {
                 mode = MODE_TABSPACE;
 
                 int i = S.length() - 1;
-                while ( (i >= n) && ((S.GetAt(i) == CHAR_SPACE) || (S.GetAt(i) == CHAR_TAB)) )  --i;
+                while ( (i >= n) && StrSplitT::is_any_space_char(S.GetAt(i)) )  --i;
                 S.SetSize(i + 1);
                 outList.Add( S );
                 S.Clear();
@@ -153,7 +258,7 @@ template <class T> int StrSplitAsArgs(const T* str,
             }
             else
             {
-                S.Append( *str );
+                S.Append( ch );
             }
             ++str;
         }
@@ -182,7 +287,7 @@ template <class T> int StrSplit(const CStrT<T>& str,
                 while ( (outList.GetCount() < max_items) &&
                         ((pos2 = str.Find(separator, pos1)) >= 0) )
                 {
-                    S.Copy( str.c_str() + pos1, pos2 - pos1 );
+                    S.Assign( str.c_str() + pos1, pos2 - pos1 );
                     outList.Add(S);
                     pos1 = pos2 + sep_len;
                 }
@@ -191,12 +296,12 @@ template <class T> int StrSplit(const CStrT<T>& str,
             {
                 while ( (pos2 = str.Find(separator, pos1)) >= 0 )
                 {
-                    S.Copy( str.c_str() + pos1, pos2 - pos1 );
+                    S.Assign( str.c_str() + pos1, pos2 - pos1 );
                     outList.Add(S);
                     pos1 = pos2 + sep_len;
                 }
             }
-            S.Copy( str.c_str() + pos1, str.length() - pos1 );
+            S.Assign( str.c_str() + pos1, str.length() - pos1 );
             outList.Add(S);
         }
     }

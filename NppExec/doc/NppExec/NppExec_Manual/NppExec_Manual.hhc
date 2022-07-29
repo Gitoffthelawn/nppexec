@@ -76,7 +76,7 @@
 			<param name="Local" value="3.5.html">
 			</OBJECT>
 		<LI> <OBJECT type="text/sitemap">
-			<param name="Name" value="3.6. NppExec's &quot;Execute...&quot;">
+			<param name="Name" value="3.6. Execute NppExec Script...">
 			<param name="Local" value="3.6.html">
 			</OBJECT>
 		<LI> <OBJECT type="text/sitemap">
@@ -102,6 +102,10 @@
 			<LI> <OBJECT type="text/sitemap">
 				<param name="Name" value="3.8.4. Calculations, strlen and so on">
 				<param name="Local" value="3.8.4.html">
+				</OBJECT>
+			<LI> <OBJECT type="text/sitemap">
+				<param name="Name" value="3.8.5. Passing enquoted strings and special characters">
+				<param name="Local" value="3.8.5.html">
 				</OBJECT>
 		</UL>
 	</UL>
@@ -166,7 +170,7 @@
 				<param name="Local" value="4.6.7.html">
 				</OBJECT>
 			<LI> <OBJECT type="text/sitemap">
-				<param name="Name" value="4.6.8. Clipboard, keysrokes and much more">
+				<param name="Name" value="4.6.8. Clipboard, keystrokes and much more">
 				<param name="Local" value="4.6.8.html">
 				</OBJECT>
 			<LI> <OBJECT type="text/sitemap">
@@ -176,6 +180,18 @@
 			<LI> <OBJECT type="text/sitemap">
 				<param name="Name" value="4.6.10. Running Lua">
 				<param name="Local" value="4.6.10.html">
+				</OBJECT>
+			<LI> <OBJECT type="text/sitemap">
+				<param name="Name" value="4.6.11. Clone current document to new editor pane">
+				<param name="Local" value="4.6.11.html">
+				</OBJECT>
+			<LI> <OBJECT type="text/sitemap">
+				<param name="Name" value="4.6.12. Passing multiple files to external tool">
+				<param name="Local" value="4.6.12.html">
+				</OBJECT>
+			<LI> <OBJECT type="text/sitemap">
+				<param name="Name" value="4.6.13. Working with the Notepad++ 'Replace' dialog">
+				<param name="Local" value="4.6.13.html">
 				</OBJECT>
 		</UL>
 		<LI> <OBJECT type="text/sitemap">
@@ -230,8 +246,8 @@
 			<param name="Local" value="Acknowledgment.html">
 			</OBJECT>
 		<LI> <OBJECT type="text/sitemap">
-			<param name="Name" value="NppExec_Guide (plain text)">
-			<param name="Local" value="NppExec_Guide.txt">
+			<param name="Name" value="NppExec_Guide">
+			<param name="Local" value="NppExec_Guide.html">
 			</OBJECT>
 	</UL>
 </UL>

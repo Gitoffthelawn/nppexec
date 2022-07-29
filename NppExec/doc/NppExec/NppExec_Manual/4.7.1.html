@@ -1,7 +1,6 @@
 <HTML>
 <HEAD>
 <META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=windows-1252">
-<META NAME="Generator" CONTENT="Internet Assistant for Word Version 3.0">
 <link href="style.css" rel="stylesheet" type="text/css">
 <title>4.7.1. Compiling simple C and Pas-programs</title>
 </HEAD>
@@ -16,15 +15,17 @@ C-programs directly from Notepad++. All you need is the following: </p>
         tcc to &quot;C:\tools\tcc&quot; or create &quot;tcc&quot; subfolder in your Notepad++ folder (for example, &quot;C:\Program Files\Notepad++\tcc&quot;)
         and unpack tcc there </p>
   <p>3) run
-        Notepad++ and call NppExec's &quot;Execute...&quot; dialog (Plugins -&gt; NppExec -&gt; Execute...
+        Notepad++ and call the &quot;Execute NppExec Script...&quot; dialog (Plugins -&gt; NppExec -&gt; Execute NppExec Script...
         - or just press F6). </p>
   <p>4) type
-        these commands in the &quot;Execute...&quot; dialog: </p>
+        these commands in the &quot;Execute NppExec Script...&quot; dialog: </p>
   <blockquote>
     <p>4.1) if tcc is placed in C:\tools\tcc</p>
     <blockquote>
       <pre>// save current file 
-NPP_SAVE 
+NPP_SAVE
+// enable the built-in error highlight filter locally
+NPE_CONSOLE local -- x+
 // compile &amp; run with tcc 
 C:\tools\tcc\tcc.exe -run &quot;$(FULL_CURRENT_PATH)&quot;</pre>
     </blockquote>
@@ -33,7 +34,9 @@ C:\tools\tcc\tcc.exe -run &quot;$(FULL_CURRENT_PATH)&quot;</pre>
       <p>4.2) if tcc is placed in $(NPP_DIRECTORY)\tcc</p>
       <blockquote>
         <pre>// save current file 
-NPP_SAVE 
+NPP_SAVE
+// enable the built-in error highlight filter locally
+NPE_CONSOLE local -- x+
 // compile &amp; run with tcc 
 &quot;$(NPP_DIRECTORY)\tcc\tcc.exe&quot; -run &quot;$(FULL_CURRENT_PATH)&quot;</pre>
       </blockquote>
@@ -43,7 +46,7 @@ NPP_SAVE
           a name of your script) and press Save.</p>
 </blockquote>
 <p>Now, when you have a C source file
-    opened in Notepad++, you can call NppExec's &quot;Execute...&quot; dialog, select &quot;tcc-run&quot; and press OK to compile &amp; run this C-file.
+    opened in Notepad++, you can call the &quot;Execute NppExec Script...&quot; dialog, select &quot;tcc-run&quot; and press OK to compile &amp; run this C-file.
 </p>
 <p>In this case tcc works as an interpreter for your C source file (its option &quot;-run&quot; does it: use &quot;tcc -?&quot; to learn more). If you need to produce the output .exe file, just remove the &quot;-run&quot; option.</p>
 <blockquote>
@@ -54,9 +57,9 @@ NPP_SAVE
 <blockquote>
   <pre>NPP_SAVE // save current file
 set local PathToFpcExe = C:\FPC\2.6.0\bin\i386-win32 // path to fpc.exe
-env_unset PATH // restore original %PATH% if it was changed before
-env_set PATH = $(SYS.PATH);$(PathToFpcExe) // add the path to fpc.exe to %PATH%
+env_set local PATH = $(SYS.PATH);$(PathToFpcExe) // add the path to fpc.exe to %PATH%
 cd $(CURRENT_DIRECTORY) // go to directory of the current file
+NPE_CONSOLE local -- x+ // enable the built-in error highlight filter locally
 fpc &quot;$(FILE_NAME)&quot; // use fpc.exe to compile</pre>
 </blockquote>
 

@@ -27,31 +27,64 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "NppExecHelpers.h"
 #include "NppScript.h"
 
-class CNppScriptList 
+#include "CFileModificationChecker.h"
+
+
+class CNppScriptList;
+
+
+class CNppScriptFileChangeListener : public IFileChangeListener
 {
+public:
+  CNppScriptFileChangeListener(CNppScriptList* pNppScriptList);
+
+  virtual void HandleFileChange(const FileInfoStruct* pFile) override;
+
+private:
+  CNppScriptList* m_pNppScriptList;
+};
+
+
+class CNppScriptList
+{
+public:
+  enum eFileStateFlags {
+    fsfNeedsReload = 0x01,
+    fsfWasReloaded = 0x02,
+    fsfIsSaving    = 0x10
+  };
+
 private:
   CListT<CNppScript *>  _Scripts;
+  tstr                  _ScriptFileName;
+  int                   _nUtf8DetectLength;
+  volatile int          _nFileState;
   bool                  _bIsModified;
   mutable CCriticalSection _csScripts;
 
   void Free();
+  void LoadFromFile_NoLock(const TCHAR* cszFileName, int nUtf8DetectLength);
+  void ReloadScriptFileIfNeeded_NoLock();
 
 public:
   CNppScriptList();
   ~CNppScriptList();
-  
+
   bool AddScript(const tstr& ScriptName, const CNppScript& newScript);
   bool DeleteScript(const tstr& ScriptName);
   bool GetScript(const tstr& ScriptName, CNppScript& outScript);
-  int  GetScriptCount() const;
-  CListT<tstr> GetScriptNames() const;
-  CListT<CNppScript> GetScripts() const;
+  int  GetScriptCount();
+  CListT<tstr> GetScriptNames();
+  CListT<CNppScript> GetScripts();
+  int  GetFileState() const  { return _nFileState; }
+  const tstr& GetScriptFileName() const { return _ScriptFileName; }
   bool IsModified() const  { return _bIsModified; }
   void LoadFromFile(const TCHAR* cszFileName, int nUtf8DetectLength = 16384);
   bool ModifyScript(const tstr& ScriptName, const CNppScript& newScript);
   void SaveToFile(const TCHAR* cszFileName);
   void SetModified(bool bIsModified)  { _bIsModified = bIsModified; }
-  bool IsScriptPresent(const tstr& ScriptName) const;
+  void SetFileState(int nFileState)  { _nFileState = nFileState; }
+  bool IsScriptPresent(const tstr& ScriptName);
 };
 
 //--------------------------------------------------------------------

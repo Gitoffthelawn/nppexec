@@ -44,6 +44,7 @@ extern COLORREF g_colorBkgnd;
 extern COLORREF g_colorTextNorm;
 
 INT  nConsoleFirstUnlockedPos = 0;
+bool  bFuncItemEntered = false;
 
 const TCHAR CONSOLE_CMD_HELP[]   = _T("HELP");   // show console commands
 const TCHAR CONSOLE_CMD_VER[]    = _T("VER");    // show plugin's version
@@ -60,6 +61,7 @@ const TCHAR PLUGIN_CURRENT_VER[] = NPPEXEC_VER_STR _T(" ANSI"); // see also: Npp
 const TCHAR CONSOLE_COMMANDS_INFO[] = _T_RE_EOL \
   _T("-------- Console keys --------") _T_RE_EOL \
   _T("Enter  -  executes entered command") _T_RE_EOL \
+  _T("Shift+Enter  -  new line") _T_RE_EOL \
   _T("Tab  -  auto-completes current command/looks through the commands history") _T_RE_EOL \
   _T("Shift+Tab  -  the same as Tab but backwards") _T_RE_EOL \
   _T("Arrow Up  -  previous command (when Console Commands History is enabled)") _T_RE_EOL \
@@ -94,7 +96,9 @@ const TCHAR CONSOLE_COMMANDS_INFO[] = _T_RE_EOL \
   _T("dir <mask or path\\mask>  -  lists files/subdirs matched the mask") _T_RE_EOL \
   _T("echo <text>  -  prints a text in the Console") _T_RE_EOL \
   _T("if <condition> goto <label>  -  jumps to the label if the condition is true") _T_RE_EOL \
+  _T("if~ <condition> goto <label>  -  calculates and checks the condition") _T_RE_EOL \
   _T("if ... else if ... else ... endif  -  conditional execution") _T_RE_EOL \
+  _T("if~ ... else if~ ... else ... endif  -  conditional execution") _T_RE_EOL \
   _T("goto <label>  -  jumps to the label") _T_RE_EOL \
   _T("exit  -  exits the current NppExec's script") _T_RE_EOL \
   _T("exit <type>  -  exits the NppExec's script") _T_RE_EOL \
@@ -115,6 +119,9 @@ const TCHAR CONSOLE_COMMANDS_INFO[] = _T_RE_EOL \
   _T("set <var> ~ strreplace <s> <t0> <t1>  -  replaces all <t0> with <t1>") _T_RE_EOL \
   _T("set <var> ~ strquote <s>  -  surrounds <s> with \"\" quotes") _T_RE_EOL \
   _T("set <var> ~ strunquote <s>  -  removes the surrounding \"\" quotes") _T_RE_EOL \
+  _T("set <var> ~ strescape <s>  -  simple character escaping (e.g. <TAB> to '\\t')") _T_RE_EOL \
+  _T("set <var> ~ strunescape <s>  -  simple character unescaping (e.g. '\\n' to <LF>)") _T_RE_EOL \
+  _T("set <var> ~ strexpand <s>  -  expands all $(sub) values within <s>") _T_RE_EOL \
   _T("set <var> ~ normpath <path>  -  returns a normalized path") _T_RE_EOL \
   _T("set <var> ~ strfromhex <hs>  -  returns a string from the hex-string") _T_RE_EOL \
   _T("set <var> ~ strtohex <s>  -  returns a hex-string from the string") _T_RE_EOL \
@@ -130,17 +137,22 @@ const TCHAR CONSOLE_COMMANDS_INFO[] = _T_RE_EOL \
   _T("unset local <var>  -  removes user\'s local variable <var>") _T_RE_EOL \
   _T("env_set <var>  -  shows the value of environment variable <var>") _T_RE_EOL \
   _T("env_set <var> = <value>  -  sets the value of environment variable <var>") _T_RE_EOL \
+  _T("env_set local ...  -  sets an environment variable locally (within the current script)") _T_RE_EOL \
   _T("env_unset <var>  -  removes/restores the environment variable <var>") _T_RE_EOL \
   _T("set_env <var> = <value>  -  see \"env_set\"") _T_RE_EOL \
   _T("unset_env <var>  -  see \"env_unset\"") _T_RE_EOL \
   _T("inputbox \"message\"  -  shows InputBox, sets $(INPUT)") _T_RE_EOL \
   _T("inputbox \"message\" : initial_value  -  shows InputBox, sets $(INPUT)") _T_RE_EOL \
   _T("inputbox \"message\" : \"value_name\" : initial_value  -  InputBox customization") _T_RE_EOL \
+  _T("inputbox \"message\" : \"value_name\" : \"initial_value\" : time_ms  -  expirable") _T_RE_EOL \
   _T("messagebox \"text\"  -  shows a simple MessageBox") _T_RE_EOL \
   _T("messagebox \"text\" : \"title\"  -  shows a MessageBox with a custom title") _T_RE_EOL \
   _T("messagebox \"text\" : \"title\" : type  -  shows a MessageBox of a given type") _T_RE_EOL \
+  _T("messagebox \"text\" : \"title\" : type : timeout  -  expirable MessageBox") _T_RE_EOL \
   _T("con_colour <colours>  -  sets the Console\'s colours") _T_RE_EOL \
+  _T("con_colour local ...  -  sets the colours locally (within the current script)") _T_RE_EOL \
   _T("con_filter <filters>  -  enables/disables the Console\'s output filters") _T_RE_EOL \
+  _T("con_filter local ...  -  sets the filters locally (within the current script)") _T_RE_EOL \
   _T("con_loadfrom <file>  -  loads a file\'s content to the Console") _T_RE_EOL \
   _T("con_load <file>  -  see \"con_loadfrom\"") _T_RE_EOL \
   _T("con_saveto <file>  -  saves the Console\'s content to a file") _T_RE_EOL \
@@ -152,21 +164,23 @@ const TCHAR CONSOLE_COMMANDS_INFO[] = _T_RE_EOL \
   _T("sel_save <file> : <encoding>  -  see \"sel_saveto\"") _T_RE_EOL \
   _T("sel_settext <text>  -  replace current selection with the text specified") _T_RE_EOL \
   _T("sel_settext+ <text>  -  replace current selection with the text specified") _T_RE_EOL \
-  _T("text_loadfrom <file>  -  replace the whole text with a file\'s content") _T_RE_EOL \
+  _T("text_loadfrom <file>  -  replace the entire text with a file\'s content") _T_RE_EOL \
   _T("text_load <file>  -  see \"text_loadfrom\"") _T_RE_EOL \
-  _T("text_saveto <file>  -  save the whole text to a file") _T_RE_EOL \
-  _T("text_saveto <file> : <encoding>  -  save the whole text to a file") _T_RE_EOL \
+  _T("text_saveto <file>  -  save the entire text to a file") _T_RE_EOL \
+  _T("text_saveto <file> : <encoding>  -  save the entire text to a file") _T_RE_EOL \
   _T("text_save <file> : <encoding>  -  see \"text_saveto\"") _T_RE_EOL \
   _T("clip_settext <text>  -  set the clipboard text") _T_RE_EOL \
   _T("npp_exec <script>  -  execute commands from specified NppExec\'s script") _T_RE_EOL \
   _T("npp_exec <file>  -  execute commands from specified NppExec\'s file") _T_RE_EOL \
   _T("npp_exec <script/file> <args>  -  passes additional arguments <args>") _T_RE_EOL \
+  _T("npp_exectext <mode> <text>  -  execute the given text") _T_RE_EOL \
   _T("npp_close  -  close current file in Notepad++") _T_RE_EOL \
   _T("npp_close <file>  -  close specified file opened in Notepad++") _T_RE_EOL \
   _T("npp_console <on/off/keep>  -  show/hide the Console window") _T_RE_EOL \
   _T("npp_console <enable/disable>  -  enables/disables output to the Console") _T_RE_EOL \
   _T("npp_console <1/0/?>  -  show/hide the Console window") _T_RE_EOL \
   _T("npp_console <+/->  -  enables/disables output to the Console") _T_RE_EOL \
+  _T("npp_console local ...  -  Console on/off locally (within the current script)") _T_RE_EOL \
   _T("npp_menucommand <menu\\item\\name>  -  executes (invokes) a menu item") _T_RE_EOL \
   _T("npp_open <file>  -  (re)open specified file in Notepad++") _T_RE_EOL \
   _T("npp_open <mask or path\\mask>  -  opens file(s) matched the mask") _T_RE_EOL \
@@ -186,6 +200,7 @@ const TCHAR CONSOLE_COMMANDS_INFO[] = _T_RE_EOL \
   _T("sci_sendmsg <msg> <wparam> <lparam>  -  msg to Scintilla") _T_RE_EOL \
   _T("sci_find <flags> <find_what>  -  find a string") _T_RE_EOL \
   _T("sci_replace <flags> <find_what> <replace_with>  -  replace a string") _T_RE_EOL \
+  _T("proc_input <string>  -  send a string to a child process") _T_RE_EOL \
   _T("proc_signal <signal>  -  signal to a child process") _T_RE_EOL \
   _T("sleep <ms>  -  sleep for ms milliseconds") _T_RE_EOL \
   _T("sleep <ms> <text>  -  print the text and sleep for ms milliseconds") _T_RE_EOL \
@@ -194,11 +209,15 @@ const TCHAR CONSOLE_COMMANDS_INFO[] = _T_RE_EOL \
   _T("npe_cmdalias <alias> =  -  removes the command alias") _T_RE_EOL \
   _T("npe_cmdalias <alias> = <command>  -  sets the command alias") _T_RE_EOL \
   _T("npe_console <options>  -  set/modify Console options/mode") _T_RE_EOL \
+  _T("npe_console local ...  -  sets Console's mode locally (within the current script)") _T_RE_EOL \
   _T("npe_debuglog <on/off>  -  enable/disable Debug Log") _T_RE_EOL \
+  _T("npe_debuglog local ...  -  enable/disable Debug Log locally (within the current script)") _T_RE_EOL \
   _T("npe_debug <1/0>  -  see \"npe_debuglog\"") _T_RE_EOL \
   _T("npe_noemptyvars <1/0>  -  enable/disable replacement of empty vars") _T_RE_EOL \
+  _T("npe_noemptyvars local ...  -  sets empty vars on/off locally (within the current script)") _T_RE_EOL \
   _T("npe_queue <command>  -  queue NppExec's command to be executed") _T_RE_EOL \
   _T("npe_sendmsgbuflen <max_len>  -  set npp/sci_sendmsg's buffer length") _T_RE_EOL \
+  _T("npe_sendmsgbuflen local ...  -  sets the buffer length locally (within the current script)") _T_RE_EOL \
   DEFAULT_ALIAS_CMD_NPPEXEC _T("<script/file>  -  the same as  npp_exec <script/file>") _T_RE_EOL \
   DEFAULT_ALIAS_CMD_NPPEXEC _T("<script/file> <args>  -  the same as  npp_exec <script/file> <args>") _T_RE_EOL \
   DEFAULT_NPPEXEC_CMD_PREFIX _T("  -  prefix for NppExec's commands (e.g. \"") DEFAULT_NPPEXEC_CMD_PREFIX _T("npp_console off\")") _T_RE_EOL \
@@ -213,7 +232,9 @@ const TCHAR CONSOLE_COMMANDS_INFO[] = _T_RE_EOL \
   _T("$(NPP_FULL_FILE_PATH)  :  full path to notepad++.exe") _T_RE_EOL \
   _T("$(CURRENT_WORD)  :  word(s) you selected in Notepad++") _T_RE_EOL \
   _T("$(CURRENT_LINE)  :  current line number") _T_RE_EOL \
+  _T("$(CURRENT_LINESTR)  :  text of the current line") _T_RE_EOL \
   _T("$(CURRENT_COLUMN)  :  current column number") _T_RE_EOL \
+  _T("$(SELECTED_TEXT)  :  the text you selected in Notepad++") _T_RE_EOL \
   _T("$(FILE_NAME_AT_CURSOR)  :  file name selected in the editor") _T_RE_EOL \
   _T("$(WORKSPACE_ITEM_PATH)  :  full path to the current item in the workspace pane") _T_RE_EOL \
   _T("$(WORKSPACE_ITEM_DIR)  :  directory containing the current item in the workspace pane") _T_RE_EOL \
@@ -240,6 +261,7 @@ const TCHAR CONSOLE_COMMANDS_INFO[] = _T_RE_EOL \
   _T("$(OUTPUTL)  :  last line in $(OUTPUT)") _T_RE_EOL \
   _T("$(EXITCODE)  :  exit code of the last executed child process") _T_RE_EOL \
   _T("$(PID)  :  process id of the current (or the last) child process") _T_RE_EOL \
+  _T("$(IS_PROCESS)  :  is child process running (1 - yes, 0 - no)") _T_RE_EOL \
   _T("$(LAST_CMD_RESULT)  :  result of the last NppExec's command") _T_RE_EOL \
   _T("                         (1 - succeeded, 0 - failed, -1 - invalid arg)") _T_RE_EOL \
   _T("$(MSG_RESULT)  :  result of \'npp_sendmsg[ex]\' or \'sci_sendmsg\'") _T_RE_EOL \
@@ -247,6 +269,8 @@ const TCHAR CONSOLE_COMMANDS_INFO[] = _T_RE_EOL \
   _T("$(MSG_LPARAM)  :  lParam (output) of \'npp_sendmsg[ex]\' or \'sci_sendmsg\'") _T_RE_EOL \
   _T("$(NPP_HWND)  :  Notepad++'s main window handle") _T_RE_EOL \
   _T("$(SCI_HWND)  :  current Scintilla's window handle") _T_RE_EOL \
+  _T("$(SCI_HWND1)  :  primary Scintilla's window handle (main view)") _T_RE_EOL \
+  _T("$(SCI_HWND2)  :  secondary Scintilla's window handle (second view)") _T_RE_EOL \
   _T("$(CON_HWND)  :  NppExec's Console window handle (RichEdit control)") _T_RE_EOL \
   _T("$(FOCUSED_HWND)  :  focused window handle") _T_RE_EOL \
   _T("$(SYS.<var>)  :  system\'s environment variable, e.g. $(SYS.PATH)") _T_RE_EOL \
@@ -268,6 +292,10 @@ typedef struct sCmdItemInfo {
   #define _T_STRLEN_CYRILLIC       _T("\xCF\xF0\xE8\xE2\xE5\xF2")
   #define _T_STRHEX_CYRILLIC       _T("CF F0 E8 E2 E5 F2")
 #endif
+
+#define _T_LOCAL_CMD_HINT \
+  _T("  When \"local\" is specified, the changes are applied locally to the current") _T_RE_EOL \
+  _T("  NppExec's script and are reverted back when the current script ends.") _T_RE_EOL
 
 #ifdef UNICODE
   #define _T_HELP_STRTOHEX_STRFROMHEX \
@@ -344,16 +372,22 @@ typedef struct sCmdItemInfo {
   _T("      - search from current_position + 1") _T_RE_EOL \
   _T("    NPE_SF_INSELECTION = 0x00100000") _T_RE_EOL \
   _T("      - search only in the selected text") _T_RE_EOL \
-  _T("    NPE_SF_INWHOLETEXT = 0x00200000") _T_RE_EOL \
-  _T("      - search in the whole text, not only from the current position") _T_RE_EOL \
+  _T("    NPE_SF_INENTIRETEXT = 0x00200000") _T_RE_EOL \
+  _T("      - search in the entire text, not only from the current position") _T_RE_EOL \
   _T("    NPE_SF_SETPOS      = 0x01000000") _T_RE_EOL \
   _T("      - move the caret to the position of the occurrence found") _T_RE_EOL \
   _T("    NPE_SF_SETSEL      = 0x02000000") _T_RE_EOL \
   _T("      - move the caret + select the occurrence found") _T_RE_EOL \
-  _T("    NPE_SF_REPLACEALL  = 0x10000000") _T_RE_EOL \
+  _T("    NPE_SF_REPLACEALL  = 0x10000000  // only for sci_replace") _T_RE_EOL \
   _T("      - replace all the occurrences from the current pos to the end") _T_RE_EOL \
   _T("    NPE_SF_PRINTALL    = 0x20000000") _T_RE_EOL \
   _T("      - print all the occurrences from the current pos to the end")
+
+#ifdef _DISABLE_CMD_ALIASES
+  #define _T_DISABLE_CMD_ALIASES_MENU_ITEM _T("Corresponding menu item (inverse): Disable command aliases.")
+#else
+  #define _T_DISABLE_CMD_ALIASES_MENU_ITEM _T("There is no corresponding menu item.")
+#endif
 
 const tCmdItemInfo CONSOLE_CMD_INFO[] = {
   // HELP
@@ -361,10 +395,9 @@ const tCmdItemInfo CONSOLE_CMD_INFO[] = {
     CONSOLE_CMD_HELP,
     _T("COMMAND:  help") _T_RE_EOL \
     _T("USAGE:") _T_RE_EOL \
-    _T("  help            (*)") _T_RE_EOL \
-    _T("  help <command>  (*)") _T_RE_EOL \
-    _T("  help all        (*)") _T_RE_EOL \
-    _T("  * available in the Console dialog only") _T_RE_EOL \
+    _T("  help") _T_RE_EOL \
+    _T("  help <command>") _T_RE_EOL \
+    _T("  help all") _T_RE_EOL \
     _T("DESCRIPTION:") _T_RE_EOL \
     _T("  Prints help ;-)") _T_RE_EOL \
     _T("EXAMPLES:") _T_RE_EOL \
@@ -497,16 +530,19 @@ const tCmdItemInfo CONSOLE_CMD_INFO[] = {
     _T("  con_colour fg = 0") _T_RE_EOL \
     _T("  con_colour bg = 0") _T_RE_EOL \
     _T("  con_colour fg = 0 bg = 0") _T_RE_EOL \
+    _T("  con_colour local fg = <RR GG BB> bg = <RR GG BB>") _T_RE_EOL \
     _T("DESCRIPTION:") _T_RE_EOL \
     _T("  fg - sets foreground (text) colour of the Console;") _T_RE_EOL \
     _T("  bg - sets background colour of the Console;") _T_RE_EOL \
     _T("  without parameters - shows current values of the colours;") _T_RE_EOL \
     _T("  the value of 0 restores the original colour(s).") _T_RE_EOL \
+    _T_LOCAL_CMD_HINT \
     _T("EXAMPLES:") _T_RE_EOL \
     _T("  con_colour bg=303030 fg=d0d0d0     // white text on dark-grey") _T_RE_EOL \
     _T("  con_colour fg = 303030 bg = D0D0D0 // dark text on light-grey") _T_RE_EOL \
     _T("  con_colour FG = 20 20 90           // dark-blue text") _T_RE_EOL \
     _T("  con_colour fg = 0                  // restore original text colour") _T_RE_EOL \
+    _T("  con_colour local fg = 303030       // dark-grey text locally") _T_RE_EOL \
     _T("REMARKS:") _T_RE_EOL \
     _T("  The foreground (text) colour is applied to new text only.") _T_RE_EOL \
     _T("  The background colour is applied to the whole Console\'s background. And") _T_RE_EOL \
@@ -514,7 +550,7 @@ const tCmdItemInfo CONSOLE_CMD_INFO[] = {
     _T("  foreground colour.") _T_RE_EOL \
     _T("  <RR GG BB> are hex values of Right, Green and Blue components of a colour") _T_RE_EOL \
     _T("  to be used. Each colour component can have a value from 00 to FF. The value") _T_RE_EOL \
-    _T("  of 00 means absence of the colour component, FF means maximum. Thus, ") _T_RE_EOL \
+    _T("  of 00 means absence of the colour component, FF means maximum. Thus,") _T_RE_EOL \
     _T("  00 00 00 means \"dark\" (absence of all colours), 00 FF 00 means \"maximum of") _T_RE_EOL \
     _T("  green\", FF FF FF means \"maximum white\".") _T_RE_EOL \
     _T("  These colours are run-time only, they are not saved when Notepad++ exits.") _T_RE_EOL \
@@ -529,6 +565,7 @@ const tCmdItemInfo CONSOLE_CMD_INFO[] = {
     _T("COMMAND:  con_filter") _T_RE_EOL \
     _T("USAGE:") _T_RE_EOL \
     _T("  con_filter +x5/-x5 +i1/-i1 +fr4/-fr4 +frc1/-frc1 +h10/-h10") _T_RE_EOL \
+    _T("  con_filter local ...") _T_RE_EOL \
     _T("DESCRIPTION:") _T_RE_EOL \
     _T("  Enables or disables the eXclude/Include/Replace/Highlight Filters") _T_RE_EOL \
     _T("  +x<N>/-x<N>     - enables/disables the Nth eXclude Mask (N = 1..5)") _T_RE_EOL \
@@ -538,9 +575,11 @@ const tCmdItemInfo CONSOLE_CMD_INFO[] = {
     _T("  +frc<N>/-frc<N> - enables/disables the Nth Replacing Filter and") _T_RE_EOL \
     _T("                    activates \"Match case\" (N = 1..4)") _T_RE_EOL \
     _T("  +h<N>/-h<N>     - enables/disables the Nth Highlight Mask (N = 1..10)") _T_RE_EOL \
+    _T_LOCAL_CMD_HINT \
     _T("EXAMPLES:") _T_RE_EOL \
     _T("  con_filter +frc3 +fr2 -i5 +x2 +h1") _T_RE_EOL \
     _T("  con_filter -x4 +h2 +i1 -fr3 +i2 -h7 +x1 +fr1 +frc2") _T_RE_EOL \
+    _T("  con_filter local -x4 +h2 +i1 -fr3  // has local effect") _T_RE_EOL \
     _T("REMARKS:") _T_RE_EOL \
     _T("  This command allows to enable and disable the Console Output Filters from") _T_RE_EOL \
     _T("  your script.") _T_RE_EOL \
@@ -631,18 +670,21 @@ const tCmdItemInfo CONSOLE_CMD_INFO[] = {
     _T("  npp_console <enable/disable>") _T_RE_EOL \
     _T("  npp_console <1/0/?>") _T_RE_EOL \
     _T("  npp_console <+/->") _T_RE_EOL \
+    _T("  npp_console local ...") _T_RE_EOL \
     _T("DESCRIPTION:") _T_RE_EOL \
     _T("  Shows/hides the Console window.") _T_RE_EOL \
     _T("  Enables/disables output to the Console.") _T_RE_EOL \
     _T("  Usually the Console window is automatically opened each time you execute") _T_RE_EOL \
     _T("  some command or script, so the purpose of this command is to change the") _T_RE_EOL \
     _T("  default behaviour.") _T_RE_EOL \
+    _T_LOCAL_CMD_HINT \
     _T("EXAMPLES:") _T_RE_EOL \
     _T("  npp_console ?  // keep the Console\'s state: hidden Console is not shown") _T_RE_EOL \
     _T("  npp_console 1  // open (show) the Console") _T_RE_EOL \
     _T("  npp_console 0  // close (hide) the Console") _T_RE_EOL \
     _T("  npp_console -  // disable output to the Console") _T_RE_EOL \
     _T("  npp_console +  // enable output to the Console") _T_RE_EOL \
+    _T("  npp_console local 0  // close the Console locally") _T_RE_EOL \
     _T("REMARKS:") _T_RE_EOL \
     _T("  You can use \'NPP_CONSOLE ?\' as a first command of your script in order to") _T_RE_EOL \
     _T("  keep the Console\'s state: don\'t open hidden Console or don\'t hide opened one.") _T_RE_EOL \
@@ -708,7 +750,42 @@ const tCmdItemInfo CONSOLE_CMD_INFO[] = {
     _T("  The purpose of NPP_EXEC is to execute NppExec's own script.") _T_RE_EOL \
     _T("  To start a batch file or an executable file in NppExec, type just:") _T_RE_EOL \
     _T("     application.exe // in case of an executable file named \"application.exe\"") _T_RE_EOL \
-    _T("     batchfile.bat   // in case of a batch file named \"batchfile.bat\"") _T_RE_EOL
+    _T("     batchfile.bat   // in case of a batch file named \"batchfile.bat\"") _T_RE_EOL \
+    _T("SEE ALSO:") _T_RE_EOL \
+    _T("  npp_exectext") _T_RE_EOL
+  },
+
+  // NPP_EXECTEXT
+  {
+    CScriptEngine::DoNppExecTextCommand::Name(),
+    _T("COMMAND:  npp_exectext") _T_RE_EOL \
+    _T("USAGE:") _T_RE_EOL \
+    _T("  npp_exectext <mode> <text>") _T_RE_EOL \
+    _T("DESCRIPTION:") _T_RE_EOL \
+    _T("  Executes the given text as NppExec's script or sends this text to") _T_RE_EOL \
+    _T("  the running child process as an input.") _T_RE_EOL \
+    _T("  The value of <mode> can be either 0 or a sum of these flags:") _T_RE_EOL \
+    _T("  0:  use the given text as is;") _T_RE_EOL \
+    _T("      if there is a running child process then send the text to") _T_RE_EOL \
+    _T("      that process as an input;") _T_RE_EOL \
+    _T("  4:  (cs) if the first line of the text is \"!collateral\" and there is") _T_RE_EOL \
+    _T("      no running child process then start a collateral script;") _T_RE_EOL \
+    _T("  8:  (cp) if the first line of the text is \"!collateral\" and there is") _T_RE_EOL \
+    _T("      a running child process then start a collateral script;") _T_RE_EOL \
+    _T("  16: (ne) lines that start with the \"nppexec:\" prefix will be executed by") _T_RE_EOL \
+    _T("      NppExec (as NppExec's script commands) and will not be sent to a") _T_RE_EOL \
+    _T("      running child process;") _T_RE_EOL \
+    _T("  64: (sv) share local variables: npp_exectext uses and updates the existing") _T_RE_EOL \
+    _T("      local variables instead of its own local variables.") _T_RE_EOL \
+    _T("EXAMPLES:") _T_RE_EOL \
+    _T("  npp_exectext 0 $(CLIPBOARD_TEXT)") _T_RE_EOL \
+    _T("  npp_exectext 28 $(SELECTED_TEXT) // process \"!collateral\" and \"nppexec:\"") _T_RE_EOL \
+    _T("  set local A = 123") _T_RE_EOL \
+    _T("  npp_exectext 0 echo A is $(A)") _T_RE_EOL \
+    _T("  set local cmds ~ strunescape !collateral\\nmessagebox Hello!!!") _T_RE_EOL \
+    _T("  npp_exectext 12 $(cmds) // process \"!collateral\"") _T_RE_EOL \
+    _T("SEE ALSO:") _T_RE_EOL \
+    _T("  npp_exec") _T_RE_EOL
   },
 
   // NPP_MENUCOMMAND
@@ -956,7 +1033,7 @@ const tCmdItemInfo CONSOLE_CMD_INFO[] = {
     _T("  where lParam or both lParam and wParam can be omitted.") _T_RE_EOL \
     _T("  See NPP_SENDMSG and SCI_SENDMSG for more details.") _T_RE_EOL \
     _T("EXAMPLES:") _T_RE_EOL \
-    _T("  npp_sendmsg NPPM_DMMGETPLUGINHWNDBYNAME \" Console \" \"NppExec.dll\"") _T_RE_EOL \
+    _T("  npp_sendmsg NPPM_DMMGETPLUGINHWNDBYNAME \"NppExec Console\" \"NppExec.dll\"") _T_RE_EOL \
     _T("  set local hwnd = $(MSG_RESULT)  // hwnd of NppExec\'s Console") _T_RE_EOL \
     _T("  npp_sendmsgex $(hwnd) WM_COMMAND 1154 0  // Word-Wrap checkbox") _T_RE_EOL \
     _T("SEE ALSO:") _T_RE_EOL \
@@ -1017,7 +1094,8 @@ const tCmdItemInfo CONSOLE_CMD_INFO[] = {
     _T("USAGE:") _T_RE_EOL \
     _T("  sci_find <flags> <find_what>") _T_RE_EOL \
     _T("DESCRIPTION:") _T_RE_EOL \
-    _T("  Searches for the given string using the specified flags.") _T_RE_EOL \
+    _T("  Searches for the given string according to the specified flags.") _T_RE_EOL \
+    _T("  The actual behavior completely depends on the <flags> specified.") _T_RE_EOL \
     _T("  It is recommended to enquote the \"find_what\" string.") _T_RE_EOL \
     _T("  Use the \"Bitwise OR\" operator '|' to combine the flags.") _T_RE_EOL \
     _T_HELP_NPE_SEARCHFLAGS _T_RE_EOL \
@@ -1034,18 +1112,18 @@ const tCmdItemInfo CONSOLE_CMD_INFO[] = {
     _T("  sci_find \"NPE_SF_BACKWARD | NPE_SF_SETSEL\" \"some text\"  // the same") _T_RE_EOL \
     _T("  set local flags ~ NPE_SF_BACKWARD | NPE_SF_SETSEL") _T_RE_EOL \
     _T("  sci_find $(flags) \"some text\"  // the same") _T_RE_EOL \
-    _T("  // search for a regular expression in the whole text, select if found:") _T_RE_EOL \
-    _T("  set local flags ~ NPE_SF_REGEXP | NPE_SF_INWHOLETEXT | NPE_SF_SETSEL") _T_RE_EOL \
+    _T("  // search for a regular expression in the entire text, select if found:") _T_RE_EOL \
+    _T("  set local flags ~ NPE_SF_REGEXP | NPE_SF_INENTIRETEXT | NPE_SF_SETSEL") _T_RE_EOL \
     _T("  sci_find $(flags) \"[0-9]+\"") _T_RE_EOL \
     _T("REMARKS:") _T_RE_EOL \
     _T("  With NPE_SF_PRINTALL, it is possible to achieve a functionality similar to") _T_RE_EOL \
     _T("  (but not equal to) the standard \"Find result\" window.") _T_RE_EOL \
     _T("  Let's assume you want to find all occurrences of \"abc\":") _T_RE_EOL \
-    _T("    sci_find NPE_SF_INWHOLETEXT|NPE_SF_PRINTALL \"abc\"") _T_RE_EOL \
+    _T("    sci_find NPE_SF_INENTIRETEXT|NPE_SF_PRINTALL \"abc\"") _T_RE_EOL \
     _T("  This will print all the occurrences of \"abc\" in the Console in a form of:") _T_RE_EOL \
     _T("    (<line>,<column>)\t abc") _T_RE_EOL \
     _T("  In case of searching with regular expressions, e.g.") _T_RE_EOL \
-    _T("    sci_find NPE_SF_INWHOLETEXT|NPE_SF_REGEXP|NPE_SF_PRINTALL \"WM_[A-Z_]+\"") _T_RE_EOL \
+    _T("    sci_find NPE_SF_INENTIRETEXT|NPE_SF_REGEXP|NPE_SF_PRINTALL \"WM_[A-Z_]+\"") _T_RE_EOL \
     _T("  the results will be printed in a form of:") _T_RE_EOL \
     _T("    (<line>,<column>)\t <matched_string>") _T_RE_EOL \
     _T("  The \"(<line>,<column>)\" part and the matched string part are always separated") _T_RE_EOL \
@@ -1066,7 +1144,8 @@ const tCmdItemInfo CONSOLE_CMD_INFO[] = {
     _T("USAGE:") _T_RE_EOL \
     _T("  sci_replace <flags> <find_what> <replace_with>") _T_RE_EOL \
     _T("DESCRIPTION:") _T_RE_EOL \
-    _T("  Searches for the given string using the specified flags and replaces it.") _T_RE_EOL \
+    _T("  Searches for the given string according to the specified flags and replaces it.") _T_RE_EOL \
+    _T("  The actual behavior completely depends on the <flags> specified.") _T_RE_EOL \
     _T("  It is recommended to enquote the \"find_what\" and \"replace_with\" strings.") _T_RE_EOL \
     _T("  Use the \"Bitwise OR\" operator '|' to combine the flags.") _T_RE_EOL \
     _T_HELP_NPE_SEARCHFLAGS _T_RE_EOL \
@@ -1079,9 +1158,9 @@ const tCmdItemInfo CONSOLE_CMD_INFO[] = {
     _T("  // replace the first occurrence of \"some text\" with nothing:") _T_RE_EOL \
     _T("  sci_replace 0 \"some text\"") _T_RE_EOL \
     _T("  // replace all occurrences of \"some text\" with nothing:") _T_RE_EOL \
-    _T("  sci_replace NPE_SF_INWHOLETEXT|NPE_SF_REPLACEALL \"some text\"") _T_RE_EOL \
+    _T("  sci_replace NPE_SF_INENTIRETEXT|NPE_SF_REPLACEALL \"some text\"") _T_RE_EOL \
     _T("  // replace all occurrences of \"some text\" with \"other text\":") _T_RE_EOL \
-    _T("  sci_replace NPE_SF_INWHOLETEXT|NPE_SF_REPLACEALL \"some text\" \"other text\"") _T_RE_EOL \
+    _T("  sci_replace NPE_SF_INENTIRETEXT|NPE_SF_REPLACEALL \"some text\" \"other text\"") _T_RE_EOL \
     _T("  // replace all occurrences in the selection, searching backward:") _T_RE_EOL \
     _T("  set local flags ~ NPE_SF_INSELECTION | NPE_SF_REPLACEALL | NPE_SF_BACKWARD") _T_RE_EOL \
     _T("  sci_replace $(flags) \"some text\" \"other text\"") _T_RE_EOL \
@@ -1103,7 +1182,7 @@ const tCmdItemInfo CONSOLE_CMD_INFO[] = {
     _T("  The combination of NPE_SF_REPLACEALL|NPE_SF_PRINTALL|NPE_SF_BACKWARD will") _T_RE_EOL \
     _T("  most likely lead to incorrect character positions printed in the Console.") _T_RE_EOL \
     _T("  Why? Because each replacement with a string of different length changes the") _T_RE_EOL \
-    _T("  length of the whole text. And while the replacements are being done from") _T_RE_EOL \
+    _T("  length of the entire text. And while the replacements are being done from") _T_RE_EOL \
     _T("  the bottom to the top, each new replacement changes the offsets of all the") _T_RE_EOL \
     _T("  strings below it, affecting the positions of the occurrences that have") _T_RE_EOL \
     _T("  already been printed in the Console. (And yes, it proves that when you tell") _T_RE_EOL \
@@ -1156,12 +1235,15 @@ const tCmdItemInfo CONSOLE_CMD_INFO[] = {
     _T("  5i. set <var> ~ strreplace <string> <sfind> <sreplace>") _T_RE_EOL \
     _T("  5j. set <var> ~ strquote <string>") _T_RE_EOL \
     _T("  5k. set <var> ~ strunquote <string>") _T_RE_EOL \
-    _T("  5l. set <var> ~ normpath <path>") _T_RE_EOL \
-    _T("  5m. set <var> ~ strfromhex <hexstring>") _T_RE_EOL \
-    _T("  5n. set <var> ~ strtohex <string>") _T_RE_EOL \
-    _T("  5o. set <var> ~ chr <n>") _T_RE_EOL \
-    _T("  5p. set <var> ~ ord <c>") _T_RE_EOL \
-    _T("  5q. set <var> ~ ordx <c>") _T_RE_EOL \
+    _T("  5l. set <var> ~ strescape <string>") _T_RE_EOL \
+    _T("  5m. set <var> ~ strunescape <string>") _T_RE_EOL \
+    _T("  5n. set <var> ~ strexpand <string>") _T_RE_EOL \
+    _T("  5o. set <var> ~ normpath <path>") _T_RE_EOL \
+    _T("  5p. set <var> ~ strfromhex <hexstring>") _T_RE_EOL \
+    _T("  5q. set <var> ~ strtohex <string>") _T_RE_EOL \
+    _T("  5r. set <var> ~ chr <n>") _T_RE_EOL \
+    _T("  5s. set <var> ~ ord <c>") _T_RE_EOL \
+    _T("  5t. set <var> ~ ordx <c>") _T_RE_EOL \
     _T("  6.  set local") _T_RE_EOL \
     _T("      set local <var>") _T_RE_EOL \
     _T("      set local <var> = ...") _T_RE_EOL \
@@ -1186,12 +1268,17 @@ const tCmdItemInfo CONSOLE_CMD_INFO[] = {
     _T("  5i. Replaces all <sfind> with <sreplace> in <string>") _T_RE_EOL \
     _T("  5j. Returns the string surrounded with \"\" quotes") _T_RE_EOL \
     _T("  5k. Removes the surrounding \"\" quotes") _T_RE_EOL \
-    _T("  5l. Returns a normalized path") _T_RE_EOL \
-    _T("  5m. Returns a string from the <hexstring>") _T_RE_EOL \
-    _T("  5n. Returns a hex-string from the <string>") _T_RE_EOL \
-    _T("  5o. Returns a character from a character code <n>") _T_RE_EOL \
-    _T("  5p. Returns a decimal character code of a character <c>") _T_RE_EOL \
-    _T("  5q. Returns a hexadecimal character code of a character <c>") _T_RE_EOL \
+    _T("  5l. Simple character escaping: '\\' -> '\\\\', '<TAB>' -> '\\t',") _T_RE_EOL \
+    _T("      '<CR>' -> '\\r', '<LF>' -> '\\n', '\"' -> '\\\"'") _T_RE_EOL \
+    _T("  5m. Simple character unescaping: '\\\\' -> '\\', '\\t' -> '<TAB>',") _T_RE_EOL \
+    _T("      '\\r' -> '<CR>', '\\n' -> '<LF>', '\\?' -> '?'") _T_RE_EOL \
+    _T("  5n. Expands all $(sub) values within the <string>") _T_RE_EOL \
+    _T("  5o. Returns a normalized path") _T_RE_EOL \
+    _T("  5p. Returns a string from the <hexstring>") _T_RE_EOL \
+    _T("  5q. Returns a hex-string from the <string>") _T_RE_EOL \
+    _T("  5r. Returns a character from a character code <n>") _T_RE_EOL \
+    _T("  5s. Returns a decimal character code of a character <c>") _T_RE_EOL \
+    _T("  5t. Returns a hexadecimal character code of a character <c>") _T_RE_EOL \
     _T("  6.  Shows/sets the value of local variable (\"set local <var> ...\")") _T_RE_EOL \
     _T("  7.  Removes the variable <var> (\"unset <var>\")") _T_RE_EOL \
     _T("  8.  Removes the local variable <var> (\"unset local <var>\")") _T_RE_EOL \
@@ -1217,6 +1304,7 @@ const tCmdItemInfo CONSOLE_CMD_INFO[] = {
     _T("  set ans ~ 1 + 2*(3 + 4) - 0x5  // calculates the expression") _T_RE_EOL \
     _T("  set ans ~ 0x001 | 0x010 | 0x100  // calculates the expression") _T_RE_EOL \
     _T("  set ans ~ hex(0x001 | 0x010 | 0x100)  // calculates as hexadecimal") _T_RE_EOL \
+    _T("  // strlen:") _T_RE_EOL \
     _T("  set n ~ strlen   ABC D   // sets n=5 (skipping leading & trailing spaces)") _T_RE_EOL \
     _T("  set n ~ strlen \"  ABC \"  // sets n=8 (including spaces & double quotes)") _T_RE_EOL \
     _T("  // in case of non-Latin characters, strlenutf8 may differ from strlen:") _T_RE_EOL \
@@ -1259,6 +1347,19 @@ const tCmdItemInfo CONSOLE_CMD_INFO[] = {
     _T("  // strunquote") _T_RE_EOL \
     _T("  set s ~ strunquote \"a b c\"    // a b c") _T_RE_EOL \
     _T("  set s ~ strunquote a b c      // a b c") _T_RE_EOL \
+    _T("  // strescape & strunescape") _T_RE_EOL \
+    _T("  set local TAB ~ chr 0x09  // <TAB> = '\\t'") _T_RE_EOL \
+    _T("  set local LF ~ chr 0x0A  // <LF> = '\\n'") _T_RE_EOL \
+    _T("  set local s = C:\\A$(TAB)b\\C$(LF)d\\Ef  // C:\\A<TAB>b\\C<LF>d\\Ef") _T_RE_EOL \
+    _T("  set local t ~ strescape \"$(s)\"  // \\\"C:\\\\A\\tb\\\\C\\nd\\\\Ef\\\"") _T_RE_EOL \
+    _T("  set local s2 ~ strunescape $(t)\\x  // \"C:\\A<TAB>b\\C<LF>d\\Ef\"x") _T_RE_EOL \
+    _T("  set local s3 ~ strunescape $(s2)  // \"C:A<TAB>bC<LF>dEf\"x") _T_RE_EOL \
+    _T("  // strexpand") _T_RE_EOL \
+    _T("  set local x = 123") _T_RE_EOL \
+    _T("  set local y = $") _T_RE_EOL \
+    _T("  set local z ~ strexpand $(y)(x) // $(y)(x) -> $(x) -> 123") _T_RE_EOL \
+    _T("  clip_settext $(y)(x) // now the clipboard contains \"$(x)\"") _T_RE_EOL \
+    _T("  set local c ~ strexpand $(CLIPBOARD_TEXT) // $(x) -> 123") _T_RE_EOL \
     _T("  // normpath") _T_RE_EOL \
     _T("  set s ~ normpath C:\\A\\.\\B\\X\\..\\C  // C:\\A\\B\\C") _T_RE_EOL \
     _T("  set s ~ normpath \"\\\\A\\B\\..\\..\\C\"  // \"\\\\C\"") _T_RE_EOL \
@@ -1301,11 +1402,14 @@ const tCmdItemInfo CONSOLE_CMD_INFO[] = {
     _T("USAGE:") _T_RE_EOL \
     _T("  env_set <var>") _T_RE_EOL \
     _T("  env_set <var> = <value>") _T_RE_EOL \
+    _T("  env_set local <var> = <value>") _T_RE_EOL \
     _T("  env_unset <var>") _T_RE_EOL \
     _T("DESCRIPTION:") _T_RE_EOL \
     _T("  1. Shows the value of environment variable (\"env_set\" without \"=\")") _T_RE_EOL \
     _T("  2. Sets the value of environment variable (\"env_set <var> = <value>\")") _T_RE_EOL \
-    _T("  3. Removes/restores the environment variable <var> (\"env_unset <var>\")") _T_RE_EOL \
+    _T("  3. Sets the value of environment variable locally (with \"local\" specified)") _T_RE_EOL \
+    _T("  4. Removes/restores the environment variable <var> (\"env_unset <var>\")") _T_RE_EOL \
+    _T_LOCAL_CMD_HINT \
     _T("EXAMPLES:") _T_RE_EOL \
     _T("  env_set NPPHOME = $(NPP_DIRECTORY)  // new environment variable: NPPHOME") _T_RE_EOL \
     _T("  env_set PATH = $(SYS.NPPHOME);$(SYS.PATH)  // modifying the PATH variable") _T_RE_EOL \
@@ -1313,6 +1417,7 @@ const tCmdItemInfo CONSOLE_CMD_INFO[] = {
     _T("                      // (NPPHOME is the first path in the PATH variable)") _T_RE_EOL \
     _T("  env_unset NPPHOME  // removing the environment variable NPPHOME") _T_RE_EOL \
     _T("  env_unset PATH     // restoring initial value of PATH") _T_RE_EOL \
+    _T("  env_set local PATH = C:\\tools;$(SYS.PATH)  // has local effect") _T_RE_EOL \
     _T("REMARKS:") _T_RE_EOL \
     _T("  Unlike set/unset, these commands deal with Notepad++\'es environment vars") _T_RE_EOL \
     _T("  which are inherited by child processes (programs, tools) started from") _T_RE_EOL \
@@ -1335,6 +1440,12 @@ const tCmdItemInfo CONSOLE_CMD_INFO[] = {
     _T("  Other environment variables (such as PATH, TEMP etc.) are not removed") _T_RE_EOL \
     _T("  by ENV_UNSET because these variables were not created by ENV_SET.") _T_RE_EOL \
     _T("  Instead, ENV_UNSET restores initial values of these variables.") _T_RE_EOL \
+    _T("  The usage of \"env_set local <var> = ...\" is similar to the sequence of") _T_RE_EOL \
+    _T("  \"env_set <var> = ...\", doing something with the <var> and finally doing") _T_RE_EOL \
+    _T("  \"env_unset <var>\". There is a difference, though: ENV_UNSET restores the") _T_RE_EOL \
+    _T("  _initial_ value of <var> (i.e. before any ENV_SET), while \"env_set local\"") _T_RE_EOL \
+    _T("  restores the _previous_ value of <var> (e.g. after the last ENV_SET) once") _T_RE_EOL \
+    _T("  the current NppExec's script ends.") _T_RE_EOL \
     _T("SEE ALSO:") _T_RE_EOL \
     _T("  set/unset") _T_RE_EOL
   },
@@ -1349,6 +1460,8 @@ const tCmdItemInfo CONSOLE_CMD_INFO[] = {
     _T("  inputbox \"message\" :: initial_value") _T_RE_EOL \
     _T("  inputbox \"message\" : \"value_name\" : initial_value") _T_RE_EOL \
     _T("  inputbox \"message\" : \" \" : initial_value") _T_RE_EOL \
+    _T("  inputbox \"message\" : \"value_name\" : \"initial_value\" : time_ms") _T_RE_EOL \
+    _T("  inputbox \"message\" ::: timeout") _T_RE_EOL \
     _T("DESCRIPTION:") _T_RE_EOL \
     _T("  1. Shows the InputBox with a message \'message\';") _T_RE_EOL \
     _T("     the input value is stored in $(INPUT), $(INPUT[1]) etc.") _T_RE_EOL \
@@ -1360,6 +1473,8 @@ const tCmdItemInfo CONSOLE_CMD_INFO[] = {
     _T("     (use \"\" to keep \"$(INPUT) =\"; use \" \" to empty it);") _T_RE_EOL \
     _T("     the initial input value is set to \'initial_value\';") _T_RE_EOL \
     _T("     the input value is stored in $(INPUT), $(INPUT[1]) etc.") _T_RE_EOL \
+    _T("  4. Shows the InputBox for 'time_ms' milliseconds. When the") _T_RE_EOL \
+    _T("     'time_ms' is over, the InputBox \"expires\" and closes.") _T_RE_EOL \
     _T("  * Note: $(INPUT), $(INPUT[1]) etc. are local variables.") _T_RE_EOL \
     _T("EXAMPLES:") _T_RE_EOL \
     _T("  // show the InputBox...") _T_RE_EOL \
@@ -1373,13 +1488,15 @@ const tCmdItemInfo CONSOLE_CMD_INFO[] = {
     _T("  // update the value of c...") _T_RE_EOL \
     _T("  set local c = $(input)") _T_RE_EOL \
     _T("  // show the InputBox with the text \"Input a:\", \"a =\"...") _T_RE_EOL \
-    _T("  inputbox \"Input a:\" : \"a =\" : ") _T_RE_EOL \
+    _T("  inputbox \"Input a:\" : \"a =\" :") _T_RE_EOL \
     _T("  // show the InputBox with empty value name...") _T_RE_EOL \
     _T("  inputbox \"Input a:\" : \" \" :   // notice the  : \" \" :  part!") _T_RE_EOL \
     _T("  // show the initial value with a colon...") _T_RE_EOL \
-    _T("  inputbox \"Input a:\" : : 1 : 2   // notice the  : :  part!") _T_RE_EOL \
+    _T("  inputbox \"Input a:\" : : \"1 : 2\"   // notice the  : :  part!") _T_RE_EOL \
     _T("  // the same...") _T_RE_EOL \
-    _T("  inputbox \"Input a:\" :: 1 : 2   // notice the  ::  part!") _T_RE_EOL \
+    _T("  inputbox \"Input a:\" :: \"1 : 2\"   // notice the  ::  part!") _T_RE_EOL \
+    _T("  // expirable InputBox...") _T_RE_EOL \
+    _T("  inputbox \"You have 5 seconds to input a:\" : a : 1 : 5000") _T_RE_EOL \
     _T("REMARKS:") _T_RE_EOL \
     _T("  You can use any environment variable inside the input value, e.g.") _T_RE_EOL \
     _T("    INPUTBOX \"Input A:\"") _T_RE_EOL \
@@ -1402,11 +1519,14 @@ const tCmdItemInfo CONSOLE_CMD_INFO[] = {
     _T("  messagebox \"text\" : \"title\"") _T_RE_EOL \
     _T("  messagebox \"text\" : \"title\" : type") _T_RE_EOL \
     _T("  messagebox \"text\" : : type") _T_RE_EOL \
+    _T("  messagebox \"text\" : \"title\" : type : time_ms") _T_RE_EOL \
+    _T("  messagebox \"text\" ::: time_ms") _T_RE_EOL \
     _T("DESCRIPTION:") _T_RE_EOL \
     _T("  1. Shows a MessageBox with a text \'text\' and default title;") _T_RE_EOL \
     _T("  2. Shows a MessageBox with a text \'text\' and a title \'title\';") _T_RE_EOL \
     _T("  3. Shows a MessageBox of the given type with a text \'text\' and a title \'title\';") _T_RE_EOL \
     _T("  4. Shows a MessageBox of the given type with a text \'text\' and default title;") _T_RE_EOL \
+    _T("  5. Shows a MessageBox for 'time_ms' milliseconds and then closes it;") _T_RE_EOL \
     _T("  The type can be:") _T_RE_EOL \
     _T("    0 or \"msg\"  - a message") _T_RE_EOL \
     _T("    1 or \"warn\" - a warning") _T_RE_EOL \
@@ -1418,6 +1538,7 @@ const tCmdItemInfo CONSOLE_CMD_INFO[] = {
     _T("  messagebox \"This is an error!\" :: err") _T_RE_EOL \
     _T("  messagebox \"This is a custom error!\" : \"ERROR\" : 2") _T_RE_EOL \
     _T("  messagebox \"This is a custom warning!\" : \"WARNING\" : warn") _T_RE_EOL \
+    _T("  messagebox \"You will see it during 3 seconds!\" ::: 3000") _T_RE_EOL \
     _T("REMARKS:") _T_RE_EOL \
     _T("  To set the keyboard focus to the Console after the MessageBox is shown,") _T_RE_EOL \
     _T("  use the following command:") _T_RE_EOL \
@@ -1489,9 +1610,11 @@ const tCmdItemInfo CONSOLE_CMD_INFO[] = {
     _T("COMMAND:  npe_console") _T_RE_EOL \
     _T("USAGE:") _T_RE_EOL \
     _T("  npe_console") _T_RE_EOL \
-    _T("  npe_console a+/a- d+/d- e0/e1 h+/h- m+/m- p+/p- q+/q- v+/v- f+/f- r+/r- k0..3") _T_RE_EOL \
+    _T("  npe_console a+/a- d+/d- e0/e1 h+/h- m+/m- p+/p- q+/q- v+/v- j+/j- f+/f- r+/r- x+/x- k0..3") _T_RE_EOL \
+    _T("  npe_console c<N> s<N>") _T_RE_EOL \
     _T("  npe_console o0/o1/o2 i0/i1/i2") _T_RE_EOL \
     _T("  npe_console <options> --") _T_RE_EOL \
+    _T("  npe_console local <options>") _T_RE_EOL \
     _T("DESCRIPTION:") _T_RE_EOL \
     _T("  1. Without parameter - shows current Console options/mode") _T_RE_EOL \
     _T("  2. X+/X-  enables/disables the option/mode X:") _T_RE_EOL \
@@ -1503,13 +1626,19 @@ const tCmdItemInfo CONSOLE_CMD_INFO[] = {
     _T("       p+/p-  print \"==== READY ====\" on/off") _T_RE_EOL \
     _T("       q+/q-  command aliases on/off") _T_RE_EOL \
     _T("       v+/v-  set the $(OUTPUT) local variable on/off") _T_RE_EOL \
+    _T("       j+/j-  kill process tree on/off") _T_RE_EOL \
     _T("       f+/f-  console output filter on/off") _T_RE_EOL \
     _T("       r+/r-  console output replace filter on/off") _T_RE_EOL \
+    _T("       x+/x-  compiler errors highlight filter on/off") _T_RE_EOL \
     _T("       k0..3  catch NppExec\'s shortcut keys on/off") _T_RE_EOL \
+    _T("       c<N>   text processing for Execute Clipboard Text") _T_RE_EOL \
+    _T("       s<N>   text processing for Execute Selected Text") _T_RE_EOL \
     _T("  3. Y0/Y1/Y2  sets the value of the option/mode Y:") _T_RE_EOL \
     _T("       o0/o1/o2  console output encoding: ANSI/OEM/UTF8") _T_RE_EOL \
     _T("       i0/i1/i2  console input encoding: ANSI/OEM/UTF8") _T_RE_EOL \
     _T("  4. --  silent (don\'t print Console mode info)") _T_RE_EOL \
+    _T("  5. local within the current NppExec's script") _T_RE_EOL \
+    _T_LOCAL_CMD_HINT \
     _T("EXAMPLES:") _T_RE_EOL \
     _T("  npe_console o1 i1 a+ --") _T_RE_EOL \
     _T("    //// OEM/OEM, append mode, silent") _T_RE_EOL \
@@ -1521,6 +1650,7 @@ const tCmdItemInfo CONSOLE_CMD_INFO[] = {
     _T("  cmd /c time /t       // cmd prints current time; $(OUTPUT) is set") _T_RE_EOL \
     _T("  echo $(OUTPUT)       // NppExec prints $(OUTPUT) i.e. current time") _T_RE_EOL \
     _T("  npe_console -- v- m+ // don\'t forget to disable the $(OUTPUT) var") _T_RE_EOL \
+    _T("  npe_console local -- v+ m- // has local effect") _T_RE_EOL \
     _T("REMARKS:") _T_RE_EOL \
     _T("  a+/a-  Console append mode on/off.") _T_RE_EOL \
     _T("         There is no corresponding menu item.") _T_RE_EOL \
@@ -1547,7 +1677,7 @@ const tCmdItemInfo CONSOLE_CMD_INFO[] = {
     _T("         This option is saved as \"PrintMsgReady\".") _T_RE_EOL \
     _T("         Default value: on.") _T_RE_EOL \
     _T("  q+/q-  Command aliases on/off.") _T_RE_EOL \
-    _T("         Corresponding menu item (inverse): Disable command aliases.") _T_RE_EOL \
+    _T("         ") _T_DISABLE_CMD_ALIASES_MENU_ITEM _T_RE_EOL \
     _T("         This option is not saved when you close Notepad++.") _T_RE_EOL \
     _T("         Default value: on") _T_RE_EOL \
     _T("         (command aliases created with NPE_CMDALIAS are active).") _T_RE_EOL \
@@ -1556,10 +1686,24 @@ const tCmdItemInfo CONSOLE_CMD_INFO[] = {
     _T("         There is no corresponding menu item.") _T_RE_EOL \
     _T("         This option is not saved when you close Notepad++.") _T_RE_EOL \
     _T("         Default value: off.") _T_RE_EOL \
+    _T("  j+/j-  Kill process tree on/off.") _T_RE_EOL \
+    _T("         When this option is On, killing a running child process (the one") _T_RE_EOL \
+    _T("         that runs in NppExec's Console) also kills any processes that were") _T_RE_EOL \
+    _T("         started from this running child process.") _T_RE_EOL \
+    _T("         There is no corresponding menu item.") _T_RE_EOL \
+    _T("         This option is saved as \"KillProcTree\".") _T_RE_EOL \
+    _T("         Default value: off.") _T_RE_EOL \
     _T("  f+/f-  Console output filter on/off.") _T_RE_EOL \
     _T("         Corresponding menu item: Console Output Filters...") _T_RE_EOL \
     _T("  r+/r-  Console output replace filter on/off.") _T_RE_EOL \
     _T("         Corresponding menu item: Console Output Filters...") _T_RE_EOL \
+    _T("  x+/x-  Compiler errors highlight filter on/off") _T_RE_EOL \
+    _T("         Enables or disables a built-in highlight filter that catches and") _T_RE_EOL \
+    _T("         highlights most of compilers' errors. This filter has lower priority") _T_RE_EOL \
+    _T("         than the user-defined highlight masks.") _T_RE_EOL \
+    _T("         There is no corresponding menu item.") _T_RE_EOL \
+    _T("         This option is saved as \"CompilerErrors\".") _T_RE_EOL \
+    _T("         Default value: off.") _T_RE_EOL \
     _T("  k0..3  Catch NppExec\'s shortcut keys on/off") _T_RE_EOL \
     _T("         Controls if NppExec\'s Console catches shortcut keys related") _T_RE_EOL \
     _T("         to NppExec\'s menu items or scripts. This allows to execute") _T_RE_EOL \
@@ -1572,6 +1716,52 @@ const tCmdItemInfo CONSOLE_CMD_INFO[] = {
     _T("         There is no corresponding menu item.") _T_RE_EOL \
     _T("         This option is not saved when you close Notepad++.") _T_RE_EOL \
     _T("         Default value: 3.") _T_RE_EOL \
+    _T("  c<N>   Text processing for Execute Clipboard Text.") _T_RE_EOL \
+    _T("         The value of <N> can be either 0 or a sum of these flags:") _T_RE_EOL \
+    _T("         0:  use the clipboard text as is;") _T_RE_EOL \
+    _T("             if there is a running child process then send the clipboard") _T_RE_EOL \
+    _T("             text to that process as an input;") _T_RE_EOL \
+    _T("         1:  (vs) substitute macro-vars in the clipboard text before the execution") _T_RE_EOL \
+    _T("             if there is no running child process;") _T_RE_EOL \
+    _T("         2:  (vp) substitute macro-vars in the clipboard text before the execution") _T_RE_EOL \
+    _T("             if there is a running child process;") _T_RE_EOL \
+    _T("         4:  (cs) if the first line of the clipboard text is \"!collateral\" and") _T_RE_EOL \
+    _T("             there is no running child process then start a collateral script;") _T_RE_EOL \
+    _T("         8:  (cp) if the first line of the clipboard text is \"!collateral\" and") _T_RE_EOL \
+    _T("             there is a running child process then start a collateral script;") _T_RE_EOL \
+    _T("         16: (ne) lines that start with the \"nppexec:\" prefix will be executed by") _T_RE_EOL \
+    _T("             NppExec (as NppExec's script commands) and will not be sent to") _T_RE_EOL \
+    _T("             a running child process;") _T_RE_EOL \
+    _T("         32: (ls) update the last executed script: Execute Clipboard Text updates") _T_RE_EOL \
+    _T("             the commands that will be executed by Execute Previous NppExec Script;") _T_RE_EOL \
+    _T("         64: (sv) share local variables: Execute Clipboard Text uses and updates") _T_RE_EOL \
+    _T("             the existing local variables instead of its own local variables.") _T_RE_EOL \
+    _T("         There is no corresponding menu item.") _T_RE_EOL \
+    _T("         This option is saved as \"ExecClipTextMode\".") _T_RE_EOL \
+    _T("         Default value: 60 (4+8+16+32).") _T_RE_EOL \
+    _T("  s<N>   Text processing for Execute Selected Text.") _T_RE_EOL \
+    _T("         The value of <N> can be either 0 or a sum of these flags:") _T_RE_EOL \
+    _T("         0:  use the selected text as is;") _T_RE_EOL \
+    _T("             if there is a running child process then send the selected") _T_RE_EOL \
+    _T("             text to that process as an input;") _T_RE_EOL \
+    _T("         1:  (vs) substitute macro-vars in the selected text before the execution") _T_RE_EOL \
+    _T("             if there is no running child process;") _T_RE_EOL \
+    _T("         2:  (vp) substitute macro-vars in the selected text before the execution") _T_RE_EOL \
+    _T("             if there is a running child process;") _T_RE_EOL \
+    _T("         4:  (cs) if the first line of the selected text is \"!collateral\" and") _T_RE_EOL \
+    _T("             there is no running child process then start a collateral script;") _T_RE_EOL \
+    _T("         8:  (cp) if the first line of the selected text is \"!collateral\" and") _T_RE_EOL \
+    _T("             there is a running child process then start a collateral script;") _T_RE_EOL \
+    _T("         16: (ne) lines that start with the \"nppexec:\" prefix will be executed by") _T_RE_EOL \
+    _T("             NppExec (as NppExec's script commands) and will not be sent to") _T_RE_EOL \
+    _T("             a running child process;") _T_RE_EOL \
+    _T("         32: (ls) update the last executed script: Execute Selected Text updates the") _T_RE_EOL \
+    _T("             commands that will be executed by Execute Previous NppExec Script;") _T_RE_EOL \
+    _T("         64: (sv) share local variables: Execute Selected Text uses and updates") _T_RE_EOL \
+    _T("             the existing local variables instead of its own local variables.") _T_RE_EOL \
+    _T("         There is no corresponding menu item.") _T_RE_EOL \
+    _T("         This option is saved as \"ExecSelTextMode\".") _T_RE_EOL \
+    _T("         Default value: 60 (4+8+16+32).") _T_RE_EOL \
     _T("  o0/o1/o2  Console output encoding: ANSI/OEM/UTF8") _T_RE_EOL \
     _T("            Corresponding menu item: Console Output...") _T_RE_EOL \
     _T("            Sets Console output encoding.") _T_RE_EOL \
@@ -1592,10 +1782,13 @@ const tCmdItemInfo CONSOLE_CMD_INFO[] = {
     _T("  npe_debuglog 1") _T_RE_EOL \
     _T("  npe_debuglog off") _T_RE_EOL \
     _T("  npe_debuglog 0") _T_RE_EOL \
+    _T("  npe_debuglog local 1/0") _T_RE_EOL \
     _T("DESCRIPTION:") _T_RE_EOL \
     _T("  1. Without parameter - shows current Debug Log state (On/Off)") _T_RE_EOL \
     _T("  2. On or 1 - enables the Debug Log in NppExec's Console") _T_RE_EOL \
-    _T("  3. Off or 0 - disables the Debug Log in NppExec's Console") _T_RE_EOL
+    _T("  3. Off or 0 - disables the Debug Log in NppExec's Console") _T_RE_EOL \
+    _T("  4. local - enables/disables the Debug Log locally") _T_RE_EOL \
+    _T_LOCAL_CMD_HINT
   },
 
   // NPE_NOEMPTYVARS
@@ -1606,10 +1799,13 @@ const tCmdItemInfo CONSOLE_CMD_INFO[] = {
     _T("  npe_noemptyvars") _T_RE_EOL \
     _T("  npe_noemptyvars 1") _T_RE_EOL \
     _T("  npe_noemptyvars 0") _T_RE_EOL \
+    _T("  npe_noemptyvars local 1/0") _T_RE_EOL \
     _T("DESCRIPTION:") _T_RE_EOL \
     _T("  1. Without parameter - shows current option\'s state") _T_RE_EOL \
     _T("  2. 1 or On - enables replacement of empty (uninitialized) vars") _T_RE_EOL \
     _T("  3. 0 or Off - disables replacement of empty (uninitialized) vars") _T_RE_EOL \
+    _T("  4. local - enables/disables empty vars locally") _T_RE_EOL \
+    _T_LOCAL_CMD_HINT \
     _T("EXAMPLES:") _T_RE_EOL \
     _T("  unset var            // to be sure that $(var) is uninitialized") _T_RE_EOL \
     _T("  unset local var      // to be sure that $(var) is uninitialized") _T_RE_EOL \
@@ -1617,6 +1813,7 @@ const tCmdItemInfo CONSOLE_CMD_INFO[] = {
     _T("  echo var = \"$(var)\"  // prints: var = \"$(var)\"") _T_RE_EOL \
     _T("  npe_noemptyvars 1    // enabled") _T_RE_EOL \
     _T("  echo var = \"$(var)\"  // prints: var = \"\"") _T_RE_EOL \
+    _T("  npe_noemptyvars local 1    // enabled locally") _T_RE_EOL \
     _T("REMARKS:") _T_RE_EOL \
     _T("  Refer to NppExec.ini, parameter NoEmptyVars in the [Console] section.") _T_RE_EOL \
     _T("  This option is not saved when you close Notepad++.") _T_RE_EOL \
@@ -1658,13 +1855,11 @@ const tCmdItemInfo CONSOLE_CMD_INFO[] = {
     _T("  echo 1st") _T_RE_EOL \
     _T("  echo 2nd") _T_RE_EOL \
     _T("  // just a nice script that looks elegant:") _T_RE_EOL \
-    _T("  npp_console -") _T_RE_EOL \
-    _T("  npe_console -- v+") _T_RE_EOL \
+    _T("  npp_console local -      // within this script") _T_RE_EOL \
+    _T("  npe_console local -- v+  // within this script") _T_RE_EOL \
     _T("  cmd /c time /t") _T_RE_EOL \
     _T("  npe_queue -v -s echo $(OUTPUT)") _T_RE_EOL \
-    _T("  npe_console -- v-") _T_RE_EOL \
-    _T("  npp_console +") _T_RE_EOL \
-    _T("  // now something really crazy, just because we _can_ do it:") _T_RE_EOL \
+     _T("  // now something really crazy, just because we _can_ do it:") _T_RE_EOL \
     _T("  npe_queue npe_queue npe_queue sleep 2000 Let's sleep for 2 seconds...") _T_RE_EOL \
     _T("  npe_queue -s npe_queue -s npe_queue -s sleep 2000 Let's sleep for 2 seconds...") _T_RE_EOL \
     _T("REMARKS:") _T_RE_EOL \
@@ -1714,12 +1909,15 @@ const tCmdItemInfo CONSOLE_CMD_INFO[] = {
     _T("COMMAND:  npe_sendmsgbuflen") _T_RE_EOL \
     _T("USAGE:") _T_RE_EOL \
     _T("  npe_sendmsgbuflen <max_length>") _T_RE_EOL \
+    _T("  npe_sendmsgbuflen local <max_length>") _T_RE_EOL \
     _T("DESCRIPTION:") _T_RE_EOL \
     _T("  Sets npp_sendmsg/sci_sendmsg's maximum buffer length") _T_RE_EOL \
+    _T_LOCAL_CMD_HINT \
     _T("EXAMPLES:") _T_RE_EOL \
     _T("  npe_sendmsgbuflen  // current buffer length") _T_RE_EOL \
     _T("  npe_sendmsgbuflen 1048576  // 1 MB") _T_RE_EOL \
     _T("  npe_sendmsgbuflen 8M  // 8 MB") _T_RE_EOL \
+    _T("  npe_sendmsgbuflen local 4M  // 4 MB locally") _T_RE_EOL \
     _T("REMARKS:") _T_RE_EOL \
     _T("  If the specified value is less than 65536, NppExec sets it to 65536.") _T_RE_EOL \
     _T("  This value is not saved when Notepad++ exits.") _T_RE_EOL \
@@ -1795,7 +1993,7 @@ const tCmdItemInfo CONSOLE_CMD_INFO[] = {
     _T("  \\r  - carriage return (CR) character;") _T_RE_EOL \
     _T("  \\t  - tabulation character;") _T_RE_EOL \
     _T("  \\\\  - \\;  \\\\n - \\n;  \\\\t - \\t.") _T_RE_EOL \
-    _T("  To replace the whole text rather than the selected text, use") _T_RE_EOL \
+    _T("  To replace the entire text rather than the selected text, use") _T_RE_EOL \
     _T("  the following script:") _T_RE_EOL \
     _T("    // 1. disabling redrawing") _T_RE_EOL \
     _T("    sci_sendmsg 0x000B 0 // WM_SETREDRAW FALSE") _T_RE_EOL \
@@ -1816,7 +2014,7 @@ const tCmdItemInfo CONSOLE_CMD_INFO[] = {
     _T("USAGE:") _T_RE_EOL \
     _T("  text_loadfrom <file>") _T_RE_EOL \
     _T("DESCRIPTION:") _T_RE_EOL \
-    _T("  Replaces the whole text with the file\'s content") _T_RE_EOL \
+    _T("  Replaces the entire text with the file\'s content") _T_RE_EOL \
     _T("EXAMPLES:") _T_RE_EOL \
     _T("  text_loadfrom c:\\temp\\output.txt") _T_RE_EOL \
     _T("REMARKS:") _T_RE_EOL \
@@ -1836,8 +2034,8 @@ const tCmdItemInfo CONSOLE_CMD_INFO[] = {
     _T("  text_saveto <file>") _T_RE_EOL \
     _T("  text_saveto <file> : <encoding>") _T_RE_EOL \
     _T("DESCRIPTION:") _T_RE_EOL \
-    _T("  1. Saves the whole text (in its current encoding) to a file") _T_RE_EOL \
-    _T("  2. Saves the whole text (converted to specified encoding) to a file") _T_RE_EOL \
+    _T("  1. Saves the entire text (in its current encoding) to a file") _T_RE_EOL \
+    _T("  2. Saves the entire text (converted to specified encoding) to a file") _T_RE_EOL \
     _T("     <encoding> may be:  a (ANSI), u (UTF-8), w (UCS-2 LE)") _T_RE_EOL \
     _T("EXAMPLES:") _T_RE_EOL \
     _T("  text_saveto c:\\temp\\output.txt // may be ANSI, UTF-8 or DBCS file") _T_RE_EOL \
@@ -1926,7 +2124,7 @@ const tCmdItemInfo CONSOLE_CMD_INFO[] = {
     _T("  Thus, \"if 3 == 1 + 2 goto Label\" is not a valid numeric comparison") _T_RE_EOL \
     _T("  because \"1 + 2\" is not calculated and remains as is, so the string") _T_RE_EOL \
     _T("  comparison is used in this case (\"3\" is compared with \"1 + 2\").") _T_RE_EOL \
-    _T("  All the calculations should be performed in advance.") _T_RE_EOL \
+    _T("  All the calculations should be performed in advance - or use IF~ .") _T_RE_EOL \
     _T("  ***** Notice the usage of double quotes and spaces between the") _T_RE_EOL \
     _T("  operands while comparing strings that contain '>', '<' and so on:") _T_RE_EOL \
     _T("    if \"1 >\" < \"2\" goto Label1  // \"1 >\" vs. \"2\"") _T_RE_EOL \
@@ -2000,7 +2198,56 @@ const tCmdItemInfo CONSOLE_CMD_INFO[] = {
     _T("  This allows to apply more-or-less complicated conditional logic") _T_RE_EOL \
     _T("  inside NppExec\'s scripts.") _T_RE_EOL \
     _T("SEE ALSO:") _T_RE_EOL \
-    _T("  else, endif, goto, label, set") _T_RE_EOL
+    _T("  if~, else, endif, goto, label, set") _T_RE_EOL
+  },
+
+  // IF~
+  {
+    CScriptEngine::DoCalcIfCommand::Name(),
+    _T("COMMAND:  if~") _T_RE_EOL \
+    _T("USAGE:") _T_RE_EOL \
+    _T("  1. if~ <condition> goto <label>") _T_RE_EOL \
+    _T("  2. if~ <condition> then") _T_RE_EOL \
+    _T("       ...") _T_RE_EOL \
+    _T("     endif") _T_RE_EOL \
+    _T("  3. if~ <condition> then") _T_RE_EOL \
+    _T("       ...") _T_RE_EOL \
+    _T("     else") _T_RE_EOL \
+    _T("       ...") _T_RE_EOL \
+    _T("     endif") _T_RE_EOL \
+    _T("  4. if~ <condition1> then") _T_RE_EOL \
+    _T("       ...") _T_RE_EOL \
+    _T("     else if~ <condition2> then") _T_RE_EOL \
+    _T("       ...") _T_RE_EOL \
+    _T("     else") _T_RE_EOL \
+    _T("       ...") _T_RE_EOL \
+    _T("     endif") _T_RE_EOL \
+    _T("  5. if~ <condition1> goto <label1>") _T_RE_EOL \
+    _T("     else if~ <condition2> goto <label2>") _T_RE_EOL \
+    _T("     else") _T_RE_EOL \
+    _T("       ...") _T_RE_EOL \
+    _T("     endif") _T_RE_EOL \
+    _T("DESCRIPTION:") _T_RE_EOL \
+    _T("  First calculates the operands, then checks the condition.") _T_RE_EOL \
+    _T("  If the condition is true, jumps to the specified label.") _T_RE_EOL \
+    _T("  If the condition is false, proceeds to the next line.") _T_RE_EOL \
+    _T("  * If the specified label can not be found within the current script,") _T_RE_EOL \
+    _T("  this command reports an error and proceeds to the next line.") _T_RE_EOL \
+    _T("  ** You should always place \"if\" and \"goto\" on the same line.") _T_RE_EOL \
+    _T("  Available conditions:") _T_RE_EOL \
+    _T("  a == b  - equal:             1 == 1,  NPPMSG == WM_USER + 1000") _T_RE_EOL \
+    _T("  a = b   - equal:             2 = 2,   $(x) + 5 = $(x) + 5") _T_RE_EOL \
+    _T("  a != b  - not equal:         1 != 2,  $(x) + 1 != sin($(y))") _T_RE_EOL \
+    _T("  a <> b  - not equal:         1 <> 2,  NPPMSG <> pi") _T_RE_EOL \
+    _T("  a > b   - greater:           2 > 1,   $(x) + 1 > 1") _T_RE_EOL \
+    _T("  a < b   - less:             -2 < 1,   $(x) - 10 < $(x) - 5") _T_RE_EOL \
+    _T("  a >= b  - greater or equal:  0 >= 0,  $(x) + 0 >= $(x)") _T_RE_EOL \
+    _T("  a <= b  - less or equal:     1 <= 2,  $(x) - 2 <= $(y) - 2") _T_RE_EOL \
+    _T("REMARKS:") _T_RE_EOL \
+    _T("  IF~ deals only with numbers and numeric calculations.") _T_RE_EOL \
+    _T("  A string operand will cause a syntax error.") _T_RE_EOL \
+    _T("SEE ALSO:") _T_RE_EOL \
+    _T("  if, else, endif, goto, label, set") _T_RE_EOL
   },
 
   // LABEL
@@ -2036,7 +2283,7 @@ const tCmdItemInfo CONSOLE_CMD_INFO[] = {
     _T("  \"exist\" in different scripts, even if SomeScript1 then uses") _T_RE_EOL \
     _T("  NPP_EXEC to execute SomeScript2 or vice versa.") _T_RE_EOL \
     _T("SEE ALSO:") _T_RE_EOL \
-    _T("  goto, if") _T_RE_EOL
+    _T("  goto, if, if~") _T_RE_EOL
   },
 
   // GOTO
@@ -2094,7 +2341,7 @@ const tCmdItemInfo CONSOLE_CMD_INFO[] = {
     _T("  whereas any declared variable is visible and exists everywhere - unless") _T_RE_EOL \
     _T("  it is a local variable, of course.)") _T_RE_EOL \
     _T("SEE ALSO:") _T_RE_EOL \
-    _T("  label, if, exit") _T_RE_EOL
+    _T("  label, if, if~, exit") _T_RE_EOL
   },
 
   // ELSE
@@ -2118,7 +2365,7 @@ const tCmdItemInfo CONSOLE_CMD_INFO[] = {
     _T("EXAMPLES:") _T_RE_EOL \
     _T("  see: if") _T_RE_EOL \
     _T("SEE ALSO:") _T_RE_EOL \
-    _T("  if, endif") _T_RE_EOL
+    _T("  if, if~, endif") _T_RE_EOL
   },
 
   // ENDIF
@@ -2134,7 +2381,7 @@ const tCmdItemInfo CONSOLE_CMD_INFO[] = {
     _T("EXAMPLES:") _T_RE_EOL \
     _T("  see: if, else") _T_RE_EOL \
     _T("SEE ALSO:") _T_RE_EOL \
-    _T("  if, else") _T_RE_EOL
+    _T("  if, if~, else") _T_RE_EOL
   },
 
   // EXIT
@@ -2193,7 +2440,26 @@ const tCmdItemInfo CONSOLE_CMD_INFO[] = {
     _T("  endif") _T_RE_EOL \
     _T("  echo There was no error, continuing...") _T_RE_EOL \
     _T("SEE ALSO:") _T_RE_EOL \
-    _T("  goto, if") _T_RE_EOL
+    _T("  goto, if, if~") _T_RE_EOL
+  },
+
+  // PROC_INPUT
+  {
+    CScriptEngine::DoProcInputCommand::Name(),
+    _T("COMMAND:  proc_input") _T_RE_EOL \
+    _T("USAGE:") _T_RE_EOL \
+    _T("  proc_input <string>") _T_RE_EOL \
+    _T("DESCRIPTION:") _T_RE_EOL \
+    _T("  Sends a given string to the running process.") _T_RE_EOL \
+    _T("  The string can be single-line or multi-line.") _T_RE_EOL \
+    _T("EXAMPLES:") _T_RE_EOL \
+    _T("  proc_input $(SELECTED_TEXT)  // sends selected text to the process") _T_RE_EOL \
+    _T("  proc_input $(CLIPBOARD_TEXT) // sends clipboard text to the process") _T_RE_EOL \
+    _T("  set local s ~ strunescape echo 123\\necho 456") _T_RE_EOL \
+    _T("  proc_input $(s)") _T_RE_EOL \
+    _T("  proc_input exit") _T_RE_EOL \
+    _T("SEE ALSO:") _T_RE_EOL \
+    _T("  proc_signal, @exit_cmd (\"help @exit_cmd\"), npp_console") _T_RE_EOL
   },
 
   // PROC_SIGNAL
@@ -2228,7 +2494,7 @@ const tCmdItemInfo CONSOLE_CMD_INFO[] = {
     _T("  Anyway, it's recommended to use an exit command (such as \"exit\" for cmd and") _T_RE_EOL \
     _T("  \"exit()\" for python) whenever possible to let the process exit normally.") _T_RE_EOL \
     _T("SEE ALSO:") _T_RE_EOL \
-    _T("  @exit_cmd (\"help @exit_cmd\"), npp_console") _T_RE_EOL
+    _T("  proc_input, @exit_cmd (\"help @exit_cmd\"), npp_console") _T_RE_EOL
   },
 
   // SLEEP
@@ -2295,6 +2561,7 @@ namespace ConsoleDlg
   void    OnDestroy(HWND hDlg);
   void    OnInitDialog(HWND hDlg);
   INT_PTR OnNotify(HWND hDlg, LPARAM lParam);
+  INT_PTR OnCtlColorEdit(WPARAM wParam, LPARAM lParam);
   INT_PTR OnPaste(CAnyRichEdit& Edit, MSGFILTER* lpmsgf);
   void    OnShowWindow(HWND hDlg);
   void    OnSize(HWND hDlg);
@@ -2302,6 +2569,10 @@ namespace ConsoleDlg
   void    loadCmdVarsList();
   bool    loadCmdHistory();
   bool    saveCmdHistory();
+
+  bool    isMultilineInput(CAnyRichEdit& Edit, int* pnTotalLines = NULL, int* pnFirstInputLine = NULL);
+  bool    isCmdHistoryRequest(CAnyRichEdit& Edit, int* pnCurrLine);
+  tstr    getInputText(CAnyRichEdit& Edit, bool* pisMultiline, int* pnTotalTextLen);
 
   void    enableFindControls(bool bEnable);
 
@@ -2472,6 +2743,11 @@ INT_PTR CALLBACK ConsoleDlgProc(
     return ConsoleDlg::OnNotify(hDlg, lParam);
   }
 
+  else if (uMessage == WM_CTLCOLOREDIT)
+  {
+    return ConsoleDlg::OnCtlColorEdit(wParam, lParam);
+  }
+
   else if (uMessage == WM_SIZE)
   {
     ConsoleDlg::OnSize(hDlg);
@@ -2492,6 +2768,27 @@ INT_PTR CALLBACK ConsoleDlgProc(
     return 1;
   }
 
+  else if (uMessage == WM_CONSOLEDLG_EXECFUNCITEM)
+  {
+    int i = (int) wParam;
+    if (g_funcItem[i]._pFunc)
+    {
+      g_funcItem[i]._pFunc();
+    }
+    bFuncItemEntered = false;
+    return 1;
+  }
+
+  else if (uMessage == WM_CONSOLEDLG_UPDATECOLOR)
+  {
+    HWND hEdFindWnd = ConsoleDlg::edFind.m_hWnd;
+    if (hEdFindWnd && ::IsWindowVisible(hEdFindWnd))
+    {
+      ::InvalidateRect(hEdFindWnd, NULL, TRUE);
+      ::UpdateWindow(hEdFindWnd);
+    }
+    return 1;
+  }
   /*
   else if (uMessage == WM_ACTIVATE)
   {
@@ -2773,6 +3070,7 @@ void ConsoleDlg::OnInitDialog(HWND hDlg)
     NppExec.GetConsole().GetConsoleEdit().SetFont(pLogFont);
   }
 
+  NppExec.GetConsole().ApplyEditorColours(false);
   NppExec.GetConsole().UpdateColours();
 
   Edit.ExLimitText(NppExec.GetOptions().GetInt(OPTI_RICHEDIT_MAXTEXTLEN));
@@ -3105,9 +3403,26 @@ INT_PTR ConsoleDlg::OnNotify(HWND hDlg, LPARAM lParam)
     static bool  bCommandEntered = false;
     static bool  bDoubleClkEntered = false;
 
-    CAnyRichEdit Edit;
-    MSGFILTER*   lpmsgf = (MSGFILTER*) lParam;
+    MSGFILTER* lpmsgf = (MSGFILTER*) lParam;
 
+    switch (lpmsgf->msg)
+    {
+        case WM_KEYDOWN:
+        case WM_KEYUP:
+        case WM_CHAR:
+        case WM_SYSKEYDOWN:
+        case WM_SYSKEYUP:
+        case WM_SYSCHAR:
+        case WM_LBUTTONDOWN:
+        case WM_LBUTTONUP:
+        case WM_LBUTTONDBLCLK:
+            break; // these messages are processed below
+
+        default:
+            return 0; // we are not interested in the rest of the messages
+    }
+
+    CAnyRichEdit Edit;
     Edit.m_hWnd = GetDlgItem(hDlg, IDC_RE_CONSOLE);
 
     // All the following code (for EN_MSGFILTER)
@@ -3328,8 +3643,8 @@ INT_PTR ConsoleDlg::OnNotify(HWND hDlg, LPARAM lParam)
                     INT   nEnd = nSelEnd;
 
                     while ((nEnd > nSelStart) &&
-                           (((ch = Edit.GetCharAt(nEnd-1)) == ' ') || 
-                           (ch == '\t') || (ch == '\r') || (ch == '\n')))
+                           (NppExecHelpers::IsAnySpaceChar(ch = Edit.GetCharAt(nEnd-1)) ||
+                            (ch == _T('\r')) || (ch == _T('\n'))))
                     {
                         nEnd--;
                     }
@@ -3383,7 +3698,7 @@ INT_PTR ConsoleDlg::OnNotify(HWND hDlg, LPARAM lParam)
             {
                 if (Runtime::GetNppExec().GetCommandExecutor().IsChildProcessRunning())
                 {
-                    Runtime::GetNppExec().GetConsole().PrintStr( _T("^Z"), true );
+                    Runtime::GetNppExec().GetConsole().PrintStr( _T("^Z") );
                     Runtime::GetNppExec().GetConsole().LockConsoleEndPos();
                     Runtime::GetNppExec().GetCommandExecutor().WriteChildProcessInput( _T("\x1A") ); // ^Z
                     Runtime::GetNppExec().GetCommandExecutor().WriteChildProcessInput( Runtime::GetNppExec().GetOptions().GetStr(OPTS_KEY_ENTER) );
@@ -3402,7 +3717,7 @@ INT_PTR ConsoleDlg::OnNotify(HWND hDlg, LPARAM lParam)
             {
                 if (Runtime::GetNppExec().isChildProcessRunning())
                 {
-                    Runtime::GetNppExec().GetConsole().PrintStr( _T("^D"), true );
+                    Runtime::GetNppExec().GetConsole().PrintStr( _T("^D") );
                     Runtime::GetNppExec().GetConsole().LockConsoleEndPos();
                     Runtime::GetNppExec().WriteChildProcessInput( _T("\x04") ); // ^D ???
                     Runtime::GetNppExec().WriteChildProcessInput( Runtime::GetNppExec().GetOptions().GetStr(OPTS_KEY_ENTER) );
@@ -3463,7 +3778,8 @@ INT_PTR ConsoleDlg::OnNotify(HWND hDlg, LPARAM lParam)
 #endif          
 
         SetFocus( GetDlgItem(hDlg, IDC_RE_CONSOLE) );
-        return 0;
+        if (lpmsgf->msg != WM_SYSKEYDOWN && lpmsgf->msg != WM_SYSKEYUP && lpmsgf->msg != WM_SYSCHAR)
+            return 0;
     }
     // <<< bAlt
 
@@ -3536,7 +3852,7 @@ INT_PTR ConsoleDlg::OnNotify(HWND hDlg, LPARAM lParam)
     // <<< WM_KEYDOWN (Find Controls)
 
     // >>> WM_KEYDOWN && hot-key
-    if ( lpmsgf->msg == WM_KEYDOWN )
+    if ( lpmsgf->msg == WM_KEYDOWN || lpmsgf->msg == WM_SYSKEYDOWN )
     {
         const unsigned int k = Runtime::GetNppExec().GetOptions().GetUint(OPTU_CONSOLE_CATCHSHORTCUTKEYS) & ConsoleDlg::CSK_ALL;
         if ( k != 0 )
@@ -3578,18 +3894,41 @@ INT_PTR ConsoleDlg::OnNotify(HWND hDlg, LPARAM lParam)
                         }
                     #endif
 
+                    if ( Runtime::GetLogger().IsOutputMode() )
+                    {
+                        Runtime::GetNppExec().GetConsole().ClearCurrentInput();
+                    }
                     Runtime::GetLogger().AddEx( _T("; Hot-key: executing function [%d], \"%s\""), i, g_funcItem[i]._itemName );
-                    
+
+                    lpmsgf->msg = 0;
                     lpmsgf->wParam = 0;
-                    if ( g_funcItem[i]._pFunc )
-                        g_funcItem[i]._pFunc();
+                    bFuncItemEntered = true;
+                    ::PostMessage( Runtime::GetNppExec().GetConsole().GetDialogWnd(), WM_CONSOLEDLG_EXECFUNCITEM, i, 0 );
                     return 0;
                 }
             }
         }
     }
     // <<< WM_KEYDOWN && hot-key
-    
+
+    if ( bFuncItemEntered )
+    {
+        if ( lpmsgf->msg == WM_CHAR || lpmsgf->msg == WM_SYSCHAR )
+        {
+            bFuncItemEntered = false;
+            lpmsgf->msg = 0; // disables the "bell" sound when e.g. Alt+Enter is pressed
+            lpmsgf->wParam = 0;
+            return 0;
+        }
+        else if ( lpmsgf->msg == WM_KEYUP || lpmsgf->msg == WM_SYSKEYUP )
+        {
+            bFuncItemEntered = false;
+            lpmsgf->msg = 0;
+            lpmsgf->wParam = 0;
+            return 0;
+        }
+    }
+
     // >>> (VK_UP || VK_DOWN) && (WM_KEYDOWN || WM_KEYUP)
     if (Runtime::GetNppExec().GetOptions().GetBool(OPTB_CONSOLE_CMDHISTORY) && 
         ((lpmsgf->wParam == VK_UP) || (lpmsgf->wParam == VK_DOWN)) &&
@@ -3607,11 +3946,9 @@ INT_PTR ConsoleDlg::OnNotify(HWND hDlg, LPARAM lParam)
 #endif          
 
         Edit.ScrollCaret();
-        
-        int nPos = Edit.ExGetSelPos();
-        int nLine = Edit.ExLineFromChar(nPos);
-        if ((nLine >= Edit.ExLineFromChar(nConsoleFirstUnlockedPos)) &&
-            (nLine < Edit.GetLineCount()))
+
+        int nLine = -1;
+        if (isCmdHistoryRequest(Edit, &nLine))
         {
             // >>> (VK_UP || VK_DOWN) && (WM_KEYDOWN || WM_KEYUP) : WM_KEYDOWN
             if (lpmsgf->msg == WM_KEYDOWN)
@@ -3757,33 +4094,32 @@ INT_PTR ConsoleDlg::OnNotify(HWND hDlg, LPARAM lParam)
         }
 #endif
 
-        TCHAR szConsoleStr[CONSOLECOMMAND_BUFSIZE];
-        szConsoleStr[0] = 0;
+        if (bShift) // Shift+Enter
+        {
+            int nPos = 0, nEndPos = 0;
+            Edit.ExGetSelPos(&nPos, &nEndPos);
+            Edit.ReplaceSelText(Runtime::GetNppExec().GetOptions().GetStr(OPTS_KEY_ENTER));
+            nPos += _T_RE_EOL_LEN;
+            Edit.ExSetSel(nPos, nPos);
+            lpmsgf->wParam = 0;
+            return 0;
+        }
 
         int nCharIndex = Edit.ExGetSelPos();
-        int nLines = Edit.ExLineFromChar(nCharIndex) + 1; //Edit.GetLineCount();
 
         if (Runtime::GetNppExec().GetCommandExecutor().IsChildProcessRunning() &&
             (nCharIndex >= nConsoleFirstUnlockedPos))
         {
-            // input line as a console input
-            if (nLines >= 1)
-            {
-                int nLineStartIndex = 0;
-                int nLineLen = GetCompleteLine(Edit, nLines-1, szConsoleStr, CONSOLECOMMAND_BUFSIZE - 1, &nLineStartIndex);
-                Edit.ExSetSel(nLineStartIndex + nLineLen, nLineStartIndex + nLineLen);
-          
-                int nFirstUnlockedLine = Edit.ExLineFromChar(nConsoleFirstUnlockedPos);
-                if ((nFirstUnlockedLine <= nLines - 1) &&
-                    (nFirstUnlockedLine >= Edit.ExLineFromChar(nLineStartIndex)))
-                {
-                    int i = nConsoleFirstUnlockedPos - nLineStartIndex;
-                    lstrcpy(szConsoleStr, szConsoleStr + i);
-                    nLineLen -= i;
-                }
+            // input line(s) as a console input
+            bool isMultiline = false;
+            int nLenPos = 0;
+            tstr cmd = getInputText(Edit, &isMultiline, &nLenPos);
 
-                tstr cmd = szConsoleStr;
-                if (cmd.length() > 0)
+            if (cmd.length() > 0)
+            {
+                Edit.ExSetSel(nLenPos, nLenPos);
+
+                if (!isMultiline)
                 {
                     TCHAR ch;
                     while (((ch = cmd.GetLastChar()) == _T('\n')) || (ch == _T('\r')))
@@ -3792,11 +4128,13 @@ INT_PTR ConsoleDlg::OnNotify(HWND hDlg, LPARAM lParam)
                     }
                     AddCommandToHistoryList(cmd);
                 }
-          
-                //lstrcat(szConsoleStr, "\n");  nLen += 1;
 
-                //cmd += _T("\r\n");
-                Runtime::GetNppExec().GetCommandExecutor().ExecuteChildProcessCommand(cmd);
+                Runtime::GetNppExec().GetCommandExecutor().ExecuteChildProcessCommand(cmd, true, true);
+            }
+            else
+            {
+                Runtime::GetNppExec().GetCommandExecutor().WriteChildProcessInput(Runtime::GetNppExec().GetOptions().GetStr(OPTS_KEY_ENTER));
+                Runtime::GetNppExec().GetConsole().LockConsoleEndPosAfterEnterPressed(true);
             }
         }
         else if (Runtime::GetNppExec().GetCommandExecutor().IsChildProcessRunning())
@@ -3806,42 +4144,29 @@ INT_PTR ConsoleDlg::OnNotify(HWND hDlg, LPARAM lParam)
         }
         else if (nCharIndex >= nConsoleFirstUnlockedPos)
         {
-            // input line as a stand-alone command
-            TCHAR ch;
-            tstr  S;
-          
-            int nLineStartIndex = 0;
-            int nLineLen = GetCompleteLine(Edit, nLines-1, szConsoleStr, CONSOLECOMMAND_BUFSIZE - 1, &nLineStartIndex);
-            Edit.ExSetSel(nLineStartIndex + nLineLen, nLineStartIndex + nLineLen);
-        
-            int nFirstUnlockedLine = Edit.ExLineFromChar(nConsoleFirstUnlockedPos);
-            if ((nFirstUnlockedLine <= nLines - 1) &&
-                (nFirstUnlockedLine >= Edit.ExLineFromChar(nLineStartIndex)))
-            {
-                int i = nConsoleFirstUnlockedPos - nLineStartIndex;
-                lstrcpy(szConsoleStr, szConsoleStr + i);
-                nLineLen -= i;
-            }
+            // input line(s) as stand-alone command(s)
+            bool isMultiline = false;
+            int nLenPos = 0;
+            tstr S = getInputText(Edit, &isMultiline, &nLenPos);
 
-            S = szConsoleStr;
-        
-            int i = 0;
-            while ((i < S.length()) && 
-                   (((ch = S[i]) == ' ') || (ch == '\t') || (ch == '\r') || (ch == '\n')))
-            {
-                i++;
-            }
-            if (i > 0)
-                S.Delete(0, i);
-
-            while (((i = S.length() - 1) >= 0) && 
-                   (((ch = S[i]) == ' ') || (ch == '\t') || (ch == '\r') || (ch == '\n')))
-            {
-                S.Delete(i);
-            }
-        
             if (S.length() > 0)
             {
+                Edit.ExSetSel(nLenPos, nLenPos);
+
+                if (isMultiline)
+                {
+                    Runtime::GetLogger().AddEx( _T_RE_EOL _T("; @Input Command: %s"), S.c_str() );
+                    Runtime::GetLogger().Add( _T("; DoExecText") );
+
+                    Runtime::GetNppExec().GetConsole().LockConsoleEndPosAfterEnterPressed(true);
+
+                    unsigned int nMode = CNppExec::etfCollateralNoChildProc | CNppExec::etfNppExecPrefix | CNppExec::etfLastScript | \
+                                         CNppExec::etfShareLocalVars | CNppExec::etfShareConsoleState;
+                    Runtime::GetNppExec().DoExecText(S, nMode);
+
+                    return 0;
+                }
+
                 tstr S1 = S;
                 CScriptEngine::eNppExecCmdPrefix cmdPrefix = CScriptEngine::checkNppExecCmdPrefix(&Runtime::GetNppExec(), S1);
                 bool isScriptRunningOrQueued = Runtime::GetNppExec().GetCommandExecutor().IsScriptRunningOrQueued();
@@ -3874,7 +4199,7 @@ INT_PTR ConsoleDlg::OnNotify(HWND hDlg, LPARAM lParam)
                     // the main thread itself may be trying to obtain the very same
                     // CriticalSection at the same time, thus blocking each other.
                     // CNppExecConsole has been designed to avoid such deadlocks.
-                    Runtime::GetNppExec().GetConsole().LockConsoleEndPosAfterEnterPressed();
+                    Runtime::GetNppExec().GetConsole().LockConsoleEndPosAfterEnterPressed(true);
 
                     if (IsConsoleVerCommand(S1))
                     {
@@ -4088,6 +4413,9 @@ INT_PTR ConsoleDlg::OnNotify(HWND hDlg, LPARAM lParam)
 
                             switch ( nCmdType )
                             {
+                                case CScriptEngine::CMDTYPE_COMMENT_OR_EMPTY:
+                                    lpmsgf->wParam = 0;
+                                    return 0;
                                 case CScriptEngine::CMDTYPE_UNKNOWN:
                                     {
                                         uSearchFlags = CDirFileLister::ESF_DIRS | CDirFileLister::ESF_FILES | CDirFileLister::ESF_PLACEFILESFIRST | CDirFileLister::ESF_SORTED;
@@ -4143,7 +4471,7 @@ INT_PTR ConsoleDlg::OnNotify(HWND hDlg, LPARAM lParam)
                                     break;
                             }
 
-                            NppExecHelpers::StrDelLeadingTabSpaces(cmdLine);
+                            NppExecHelpers::StrDelLeadingAnySpaces(cmdLine);
 
                             bool bEndsWithIncompleteMacroVar = false;
                             const int nMacroVarStart = cmdLine.RFind(_T("$("));
@@ -4334,7 +4662,7 @@ INT_PTR ConsoleDlg::OnNotify(HWND hDlg, LPARAM lParam)
                                 {
                                     if ( c_base::_tstr_unsafe_cmpn(szLine, _T("HELP"), 4) == 0 )
                                     {
-                                        if ( NppExecHelpers::IsTabSpaceChar(szLine[4]) )
+                                        if ( NppExecHelpers::IsAnySpaceChar(szLine[4]) )
                                         {
                                             // Allow Tab-completion from CmdVarsList after "help ..."
                                             n = 5;
@@ -4358,7 +4686,7 @@ INT_PTR ConsoleDlg::OnNotify(HWND hDlg, LPARAM lParam)
                                     if ( n != 0 )
                                     {
                                         // skip tabs and spaces
-                                        while ( NppExecHelpers::IsTabSpaceChar(szLine[n]) )  ++n;
+                                        while ( NppExecHelpers::IsAnySpaceChar(szLine[n]) )  ++n;
 
                                         // don't do anything special for "$(" here
                                         if ( szLine[n] == _T('$') )
@@ -4569,24 +4897,45 @@ INT_PTR ConsoleDlg::OnNotify(HWND hDlg, LPARAM lParam)
   return 0;
 }
 
+INT_PTR ConsoleDlg::OnCtlColorEdit(WPARAM wParam, LPARAM lParam)
+{
+    if ( edFind.m_hWnd == (HWND) lParam )
+    {
+        COLORREF crTextColor;
+        COLORREF crBkgndColor;
+        HBRUSH   hBkgndBrush = NULL;
+
+        if ( Runtime::GetNppExec().GetOptions().GetBool(OPTB_CONSOLE_USEEDITORCOLORS) )
+        {
+            hBkgndBrush = Runtime::GetNppExec().GetConsole().GetCurrentBkgndBrush();
+        }
+
+        if ( hBkgndBrush != NULL )
+        {
+            crTextColor = Runtime::GetNppExec().GetConsole().GetCurrentColorTextNorm();
+            crBkgndColor = Runtime::GetNppExec().GetConsole().GetCurrentColorBkgnd();
+        }
+        else
+        {
+            crTextColor = GetSysColor(COLOR_WINDOWTEXT);
+            crBkgndColor = GetSysColor(COLOR_WINDOW);
+            hBkgndBrush = GetSysColorBrush(COLOR_WINDOW);
+        }
+
+        SetTextColor( (HDC) wParam, crTextColor );
+        SetBkMode( (HDC) wParam, TRANSPARENT );
+        SetBkColor( (HDC) wParam, crBkgndColor );
+
+        return (LRESULT) hBkgndBrush;
+    }
+
+    return 0;
+}
+
 void ConsoleDlg::OnShowWindow(HWND hDlg)
 {
   HWND hEd = GetDlgItem(hDlg, IDC_RE_CONSOLE);
   ::SetFocus(hEd);
-
-  /*
-  if (!Runtime::GetNppExec().GetOptions().GetBool(OPTB_CONFLTR_ENABLE))
-  {
-    ::SendMessage(hDlg, WM_SETTEXT, 0, (LPARAM) " Console ");
-  }
-  else
-  {
-    ::SendMessage(hDlg, WM_SETTEXT, 0, (LPARAM) " Console* ");
-  }
-  */
-
-  //CmdHistoryList.DeleteAll();
-  //pCmdHistoryItemPtr = NULL;
 }
 
 void ConsoleDlg::OnSize(HWND hDlg)
@@ -4640,11 +4989,17 @@ void ConsoleDlg::printConsoleReady()
   if (NppExec.GetOptions().GetBool(OPTB_CONSOLE_PRINTMSGREADY) &&
       !NppExec.GetCommandExecutor().IsChildProcessRunning())
   {
-    NppExec.GetConsole().PrintMessage( _T("================ READY ================"), false );
+    tstr sMsgReady = NppExec.GetOptions().GetStr(OPTS_CONSOLE_CUSTOMMSGREADY);
+    if (CNppExecMacroVars::ContainsMacroVar(sMsgReady))
+    {
+      NppExec.GetMacroVars().CheckAllMacroVars(nullptr, sMsgReady, true);
+    }
+    const UINT nMsgFlags = CNppExecConsole::pfLogThisMsg;
+    NppExec.GetConsole().PrintMessage( sMsgReady.c_str(), nMsgFlags );
   }
 }
 
-bool ConsoleDlg::IsConsoleHelpCommand(const tstr& S)
+bool ConsoleDlg::IsConsoleHelpCommand(const tstr& S, bool bCalledFromScriptEngine )
 {
   CNppExec& NppExec = Runtime::GetNppExec();
 
@@ -4652,23 +5007,23 @@ bool ConsoleDlg::IsConsoleHelpCommand(const tstr& S)
   {
     if (S == CONSOLE_CMD_HELP)
     {
-      NppExec.GetConsole().PrintMessage(CONSOLE_COMMANDS_INFO, false);
-      printConsoleReady();
+      const UINT nMsgFlags = CNppExecConsole::pfLogThisMsg | CNppExecConsole::pfNewLine;
+      NppExec.GetConsole().PrintMessage(CONSOLE_COMMANDS_INFO, nMsgFlags);
+      if (!bCalledFromScriptEngine) printConsoleReady();
       return true;
     }
     else
     {
-      int i = S.Find(_T(' '));
-      if (i < 0)  i = S.Find(_T('\t'));
+      int i = S.FindOneOf(_T(" \t\v\f"));
       if (i > 0)
       {
         tstr S1;
 
         ++i;
-        while (NppExecHelpers::IsTabSpaceChar(S[i])) ++i;
-        S1.Copy( S.c_str() + i, S.length() - i );
+        while (NppExecHelpers::IsAnySpaceChar(S[i])) ++i;
+        S1.Assign( S.c_str() + i, S.length() - i );
         i = 0;
-        while ((i < S1.length()) && !NppExecHelpers::IsTabSpaceChar(S1[i])) ++i;
+        while ((i < S1.length()) && !NppExecHelpers::IsAnySpaceChar(S1[i])) ++i;
         if (i < S1.length())
         {
           S1.SetSize(i);
@@ -4678,15 +5033,16 @@ bool ConsoleDlg::IsConsoleHelpCommand(const tstr& S)
           NppExecHelpers::StrUpper(S1);
           if (S1 == _T("ALL"))
           {
-            NppExec.GetConsole().PrintMessage( _T(""), false );
-            NppExec.GetConsole().PrintMessage(CONSOLE_COMMANDS_INFO, false);
+            const UINT nMsgFlags = CNppExecConsole::pfLogThisMsg | CNppExecConsole::pfNewLine;
+            NppExec.GetConsole().PrintMessage( _T(""), nMsgFlags );
+            NppExec.GetConsole().PrintMessage(CONSOLE_COMMANDS_INFO, nMsgFlags);
 
             for (const tCmdItemInfo& ci : CONSOLE_CMD_INFO)
             {
-              NppExec.GetConsole().PrintMessage( _T("------------------------------------------------------------------------------"), false );
-              NppExec.GetConsole().PrintMessage( ci.info, false );
+              NppExec.GetConsole().PrintMessage( _T("------------------------------------------------------------------------------"), nMsgFlags );
+              NppExec.GetConsole().PrintMessage( ci.info, nMsgFlags );
             }
-            printConsoleReady();
+            if (!bCalledFromScriptEngine) printConsoleReady();
             return true;
           }
           else
@@ -4715,16 +5071,18 @@ bool ConsoleDlg::IsConsoleHelpCommand(const tstr& S)
               S1 = CScriptEngine::DoTextSaveToCommand::Name();
             else if (S1 == CScriptEngine::DoConColourCommand::AltName())
               S1 = CScriptEngine::DoConColourCommand::Name();
-            else if (S1 == _T("STRLENUTF8") || S1 == _T("STRLENU")    || 
-                     S1 == _T("STRLENSCI")  || S1 == _T("STRLENS")    || 
-                     S1 == _T("STRLENA")    || S1 == _T("STRLEN")     || 
-                     S1 == _T("STRUPPER")   || S1 == _T("STRLOWER")   || 
-                     S1 == _T("SUBSTR")     || 
-                     S1 == _T("STRFIND")    || S1 == _T("STRRFIND")   ||
-                     S1 == _T("STRREPLACE") || S1 == _T("STRRPLC")    ||
-                     S1 == _T("STRQUOTE")   || S1 == _T("STRUNQUOTE") ||
+            else if (S1 == _T("STRLENUTF8") || S1 == _T("STRLENU")     || 
+                     S1 == _T("STRLENSCI")  || S1 == _T("STRLENS")     || 
+                     S1 == _T("STRLENA")    || S1 == _T("STRLEN")      || 
+                     S1 == _T("STRUPPER")   || S1 == _T("STRLOWER")    || 
+                     S1 == _T("SUBSTR")     ||
+                     S1 == _T("STRFIND")    || S1 == _T("STRRFIND")    ||
+                     S1 == _T("STRREPLACE") || S1 == _T("STRRPLC")     ||
+                     S1 == _T("STRQUOTE")   || S1 == _T("STRUNQUOTE")  ||
+                     S1 == _T("STRESCAPE")  || S1 == _T("STRUNESCAPE") ||
+                     S1 == _T("STREXPAND")  ||
                      S1 == _T("NORMPATH")   ||
-                     S1 == _T("STRFROMHEX") || S1 == _T("STRTOHEX")   ||
+                     S1 == _T("STRFROMHEX") || S1 == _T("STRTOHEX")    ||
                      S1 == _T("CHR")        ||
                      S1 == _T("ORD")        || S1 == _T("ORDX"))
               S1 = CScriptEngine::DoSetCommand::Name();
@@ -4738,9 +5096,10 @@ bool ConsoleDlg::IsConsoleHelpCommand(const tstr& S)
             {
               if (S1 == ci.name)
               {
-                NppExec.GetConsole().PrintMessage( _T(""), false );
-                NppExec.GetConsole().PrintMessage( ci.info, false );
-                printConsoleReady();
+                const UINT nMsgFlags = CNppExecConsole::pfLogThisMsg | CNppExecConsole::pfNewLine;
+                NppExec.GetConsole().PrintMessage( _T(""), nMsgFlags );
+                NppExec.GetConsole().PrintMessage( ci.info, nMsgFlags );
+                if (!bCalledFromScriptEngine) printConsoleReady();
                 return true;
               }
             }
@@ -4756,7 +5115,8 @@ bool ConsoleDlg::IsConsoleHelpCommand(const tstr& S)
       NppExec.OnHelpManual();
     else
       NppExec.OnHelpAbout();
-    NppExec.GetConsole().PrintMessage( _T(""), false );
+    const UINT nMsgFlags = CNppExecConsole::pfLogThisMsg | CNppExecConsole::pfNewLine;
+    NppExec.GetConsole().PrintMessage( _T(""), nMsgFlags );
     printConsoleReady();
     return true;
   }
@@ -4768,8 +5128,9 @@ bool ConsoleDlg::IsConsoleVerCommand(const tstr& S)
     if (S == CONSOLE_CMD_VER)
     {
         CNppExec& NppExec = Runtime::GetNppExec();
-        NppExec.GetConsole().PrintMessage( _T(""), false );
-        NppExec.GetConsole().PrintMessage( PLUGIN_CURRENT_VER, false );
+        const UINT nMsgFlags = CNppExecConsole::pfLogThisMsg | CNppExecConsole::pfNewLine;
+        NppExec.GetConsole().PrintMessage( _T(""), nMsgFlags );
+        NppExec.GetConsole().PrintMessage( PLUGIN_CURRENT_VER, nMsgFlags );
         printConsoleReady();
         return true;
     }
@@ -4784,6 +5145,9 @@ void ConsoleDlg::loadCmdVarsList()
   CmdVarsList.Add( MACRO_WORKSPACE_ITEM_NAME );    //  $(WORKSPACE_ITEM_NAME)
   CmdVarsList.Add( MACRO_WORKSPACE_ITEM_DIR );     //  $(WORKSPACE_ITEM_DIR)
   CmdVarsList.Add( _T("$(SYS.PATH)") );            //  $(SYS.PATH)
+  CmdVarsList.Add( MACRO_SELECTED_TEXT );          //  $(SELECTED_TEXT)
+  CmdVarsList.Add( MACRO_SCI_HWND2 );              //  $(SCI_HWND2)
+  CmdVarsList.Add( MACRO_SCI_HWND1 );              //  $(SCI_HWND1)
   CmdVarsList.Add( MACRO_SCI_HWND );               //  $(SCI_HWND)
   CmdVarsList.Add( MACRO_RIGHT_VIEW_FILE );        //  $(RIGHT_VIEW_FILE)
   CmdVarsList.Add( _T("$(RARGV[1])") );            //  $(RARGV[1])
@@ -4802,6 +5166,7 @@ void ConsoleDlg::loadCmdVarsList()
   CmdVarsList.Add( MACRO_MSG_LPARAM );             //  $(MSG_LPARAM)
   CmdVarsList.Add( MACRO_LEFT_VIEW_FILE );         //  $(LEFT_VIEW_FILE)
   CmdVarsList.Add( MACRO_LAST_CMD_RESULT );        //  $(LAST_CMD_RESULT)
+  CmdVarsList.Add( MACRO_IS_PROCESS );             //  $(IS_PROCESS)
   CmdVarsList.Add( _T("$(INPUT[1])") );            //  $(INPUT[1])
   CmdVarsList.Add( MACRO_INPUT );                  //  $(INPUT)
   CmdVarsList.Add( MACRO_FILE_FULLPATH );          //  $(FULL_CURRENT_PATH)
@@ -4812,6 +5177,7 @@ void ConsoleDlg::loadCmdVarsList()
   CmdVarsList.Add( MACRO_EXITCODE );               //  $(EXITCODE)
   CmdVarsList.Add( MACRO_CURRENT_WORKING_DIR );    //  $(CWD)
   CmdVarsList.Add( MACRO_CURRENT_WORD );           //  $(CURRENT_WORD)
+  CmdVarsList.Add( MACRO_CURRENT_LINESTR );        //  $(CURRENT_LINESTR)
   CmdVarsList.Add( MACRO_CURRENT_LINE );           //  $(CURRENT_LINE)
   CmdVarsList.Add( MACRO_FILE_DIRPATH );           //  $(CURRENT_DIRECTORY)
   CmdVarsList.Add( MACRO_CURRENT_COLUMN );         //  $(CURRENT_COLUMN)
@@ -4857,7 +5223,8 @@ bool ConsoleDlg::loadCmdHistory()
   {
     while ( fbuf.GetLine(S) >= 0 )
     {
-      CmdHistoryList.Add(S);
+      if ( !S.IsEmpty() )
+        CmdHistoryList.Add(S);
     }
 
     return true;
@@ -4918,6 +5285,58 @@ bool ConsoleDlg::saveCmdHistory()
 bool ConsoleDlg::SaveCmdHistory()
 {
   return saveCmdHistory();
+}
+
+bool ConsoleDlg::isMultilineInput(CAnyRichEdit& Edit, int* pnTotalLines, int* pnFirstInputLine)
+{
+  bool bRet = false;
+  int nFirstInputLine = 0;
+  int nTotalLines = Edit.GetLineCount();
+  if (nTotalLines > 1)
+  {
+    nFirstInputLine = Edit.ExLineFromChar(nConsoleFirstUnlockedPos);
+    if (nFirstInputLine != nTotalLines - 1)
+      bRet = true;
+  }
+
+  if (pnTotalLines) *pnTotalLines = nTotalLines;
+  if (pnFirstInputLine) *pnFirstInputLine = nFirstInputLine;
+  return bRet;
+}
+
+bool ConsoleDlg::isCmdHistoryRequest(CAnyRichEdit& Edit, int* pnCurrLine)
+{
+  int nTotalLines = 0, nFirstInputLine = 0;
+  if (isMultilineInput(Edit, &nTotalLines, &nFirstInputLine))
+    return false;
+
+  int nPos = Edit.ExGetSelPos();
+  int nLine = Edit.ExLineFromChar(nPos);
+  *pnCurrLine = nLine;
+  return ((nLine >= nFirstInputLine) && (nLine < nTotalLines));
+}
+
+tstr ConsoleDlg::getInputText(CAnyRichEdit& Edit, bool* pisMultiline, int* pnTotalTextLen)
+{
+    tstr S;
+    int nTotalLines = 0;
+    *pisMultiline = isMultilineInput(Edit, &nTotalLines);
+    if (nTotalLines != 0)
+    {
+        *pnTotalTextLen = Edit.GetTextLengthEx();
+        int nInputLength = *pnTotalTextLen; 
+        nInputLength -= nConsoleFirstUnlockedPos;
+        if (nInputLength > 0)
+        {
+            S.Reserve(nInputLength);
+
+            nInputLength = Edit.GetTextAt(nConsoleFirstUnlockedPos, nInputLength, S.c_str());
+            S.SetLengthValue(nInputLength);
+            S.Replace(_T_RE_EOL, Runtime::GetNppExec().GetOptions().GetStr(OPTS_KEY_ENTER));
+        }
+    }
+
+    return S;
 }
 
 void ConsoleDlg::enableFindControls(bool bEnable)
@@ -5135,7 +5554,7 @@ LRESULT CALLBACK ConsoleDlg::findEditWndProc(
     LPARAM lParam)
   {
     //static bool bTrackingMouse = false;
-    
+
     /**/
     if (uMessage == WM_SETFOCUS)
     {

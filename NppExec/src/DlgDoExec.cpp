@@ -22,8 +22,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "NppExecHelpers.h"
 
 
-CFileModificationChecker g_scriptFileChecker;
-
 CDoExecDlg               DoExecDlg;
 CScriptNameDlg           ScriptNameDlg;
 int                      g_nCurrentWordStart;
@@ -40,6 +38,9 @@ RECT CDoExecDlg::rcBtSaveInitial;
 RECT CDoExecDlg::rcBtCancelInitial;
 
 const TCHAR TEMP_SCRIPT_NAME[] = _T(" <temporary script>");
+
+#define  MAX_PLUGIN_NAME  60
+extern TCHAR EXECUTE_DLG_TITLE[MAX_PLUGIN_NAME + 10];
 
 
 // this variable stores previous script name from DoExecDlg
@@ -229,7 +230,7 @@ void CDoExecDlg::OnBtOK(BOOL bUpdateCmdList)
 
     if ( NppExec.m_bAnotherNppExecDllExists )
     {
-      NppExec.SaveScripts();
+      NppExec.SaveScripts(0);
     }
   
   } // (bUpdateCmdList || bModified)
@@ -291,37 +292,36 @@ void CDoExecDlg::OnCbnSelChange()
   ShowScriptText(g_szPrevScriptName);
 }
 
-bool CDoExecDlg::checkScriptFile()
+bool CDoExecDlg::isScriptFileChanged()
 {
   CNppExec& NppExec = Runtime::GetNppExec();
   if ( !NppExec.GetOptions().GetBool(OPTB_WATCHSCRIPTFILE) )
     return false;
-    
-  FILETIME writeTime;
 
-  if ( g_scriptFileChecker.RequestFileTime(&writeTime) )
+  CNppScriptList& ScriptsList = NppExec.m_ScriptsList;
+  if ( !NppExecHelpers::CheckFileExists(ScriptsList.GetScriptFileName()) )
   {
-    if ( g_scriptFileChecker.IsFileTimeChanged(&writeTime) != 0 )
-    {
-      tstr path = NppExec.ExpandToFullConfigPath(SCRIPTFILE_SAVED, true);
-      NppExec.m_ScriptsList.LoadFromFile(path.c_str(), NppExec.GetOptions().GetInt(OPTI_UTF8_DETECT_LENGTH));
-      g_scriptFileChecker.UpdateFileInfo();
-        //MessageBoxA(NULL,"","",MB_OK);
-      return true;
-    }
+    ScriptsList.SetModified(true);
+    return true;
   }
-  else
+
+  int nFileState = ScriptsList.GetFileState();
+  if ( nFileState & CNppScriptList::fsfNeedsReload )
+    return true;
+
+  if ( nFileState & CNppScriptList::fsfWasReloaded )
   {
-    // No access to the script file.
-    // Maybe it has been deleted? Then we restore it.
-    NppExec.m_ScriptsList.SetModified(true);
+    nFileState ^= CNppScriptList::fsfWasReloaded;
+    ScriptsList.SetFileState(nFileState);
+    return true;
   }
+
   return false;
 }
 
 void CDoExecDlg::OnInitDialog(HWND hDlg)
 {
-  bool bScriptFileChanged = checkScriptFile();
+  bool bScriptFileChanged = isScriptFileChanged();
     
   m_bFirstSetFocus = true;
   
@@ -386,6 +386,14 @@ void CDoExecDlg::OnInitDialog(HWND hDlg)
   }
   CenterWindow(Runtime::GetNppExec().m_nppData._nppHandle);
 
+  {
+    HFONT hEdFont = Runtime::GetNppExec()._execdlgFont;
+    if ( hEdFont )
+    {
+      m_edScript.SendMsg( WM_SETFONT, (WPARAM) hEdFont, 0 );
+    }
+  }
+
   m_cbScriptNames.AddString(TEMP_SCRIPT_NAME);
   
   tstr              S;
@@ -441,7 +449,20 @@ void CDoExecDlg::OnInitDialog(HWND hDlg)
   ShowScriptText(g_szPrevScriptName);
   
   if (bScriptFileChanged)
-    this->SetText( _T("Execute... *") );
+  {
+    S = EXECUTE_DLG_TITLE;
+    S += _T(" *");
+    this->SetText( S.c_str() );
+
+    if (Runtime::GetNppExec().m_ScriptsList.GetFileState() == CNppScriptList::fsfWasReloaded)
+    {
+      Runtime::GetNppExec().m_ScriptsList.SetFileState(0);
+    }
+  }
+  else
+  {
+    this->SetText( EXECUTE_DLG_TITLE );
+  }
 
   m_cbScriptNames.SetFocus();
 }
@@ -561,13 +582,26 @@ void CDoExecDlg::ShowScriptText(const tstr& ScriptName)
 
 bool IsDelimiterCharacter(const TCHAR ch)
 {
-  return (ch == ' '  || ch == '\t' || 
-          ch == ','  || ch == '.'  ||
-          ch == ';'  || ch == ':'  ||
-          ch == '/'  || ch == '\\' ||
-          ch == '|'  || ch == '\"' || 
-          ch == '\r' || ch == '\n' ||
-          ch == 0);
+  switch (ch)
+  {
+    case _T(' '):
+    case _T('\t'):
+    case _T(','):
+    case _T('.'):
+    case _T(';'):
+    case _T(':'):
+    case _T('/'):
+    case _T('\\'):
+    case _T('|'):
+    case _T('\"'):
+    case _T('\r'):
+    case _T('\n'):
+    case _T('\v'):
+    case _T('\f'):
+    case 0:
+      return true;
+  }
+  return false;
 }
 
 int GetCurrentEditWord(HWND hEd, TCHAR* lpWordBuf, int nWordBufSize)
@@ -922,7 +956,7 @@ bool CScriptNameDlg::OnBtSave()
     return false;
   }
 
-  if ( NppExecHelpers::IsTabSpaceChar(DoExecDlg.m_szScriptNameToSave[0]) )
+  if ( NppExecHelpers::IsAnySpaceChar(DoExecDlg.m_szScriptNameToSave[0]) )
   {
     DoExecDlg.m_szScriptNameToSave[0] = 0;
     MessageBox(m_hWnd, _T("Script name can\'t contain leading space characters"), 
@@ -957,7 +991,7 @@ bool CScriptNameDlg::OnBtSave()
     // no need to modify m_cbScriptName because this dialog will be closed now
     
     // saving modifications in scripts
-    Runtime::GetNppExec().SaveScripts();
+    Runtime::GetNppExec().SaveScripts(CNppExec::ssfSaveLastScript);
     return true;
   }
 }

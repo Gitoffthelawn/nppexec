@@ -28,6 +28,12 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // this is sent in case of CScriptEngine's NPP_CONSOLE command --
 #define WM_CONSOLEDLG_CLOSE (WM_USER + 7701)
 
+// execute g_funcItem[i]._pFunc()
+#define WM_CONSOLEDLG_EXECFUNCITEM (WM_USER + 7702)
+
+// update the search edit's color
+#define WM_CONSOLEDLG_UPDATECOLOR (WM_USER + 7703)
+
 // hm, what is this? --
 #define WM_NPPCLOSE         (WM_USER + 1011)
 
@@ -57,7 +63,7 @@ namespace ConsoleDlg
     bool EnableTransparency(bool bEnable);
     bool SaveCmdHistory();
     void GoToError(int direction);
-    bool IsConsoleHelpCommand(const tstr& S);
+    bool IsConsoleHelpCommand(const tstr& S, bool bCalledFromScriptEngine = false);
     bool IsConsoleVerCommand(const tstr& S);
 
     extern int GoToError_nCurrentLine;

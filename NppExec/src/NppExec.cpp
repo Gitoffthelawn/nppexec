@@ -17,14 +17,15 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
 /****************************************************************************
- * NppExec plugin ver. 0.6.2 for Notepad++
- * by DV <dvv81 @ ukr.net>, December 2006 - February 2021
+ * NppExec plugin ver. 0.8.2 for Notepad++
+ * by DV <dvv81 @ ukr.net>, December 2006 - June 2022
+ * https://github.com/d0vgan/nppexec
  * Powered by Function Parser (C) Juha Nieminen, Joel Yliluoma
  ****************************************************************************
  *
  * Abilities:
- *   1) Run multiple commands from the "Execute..." dialog
- *   2) Run stand-alone command from the Console Dlg
+ *   1) Run multiple commands from the "Execute NppExec Script..." dialog
+ *   2) Run stand-alone command from the NppExec Console
  *   3) Separate console for each NppExec.dll (e.g. NppExec1.dll, NppExec2.dll)
  *   4) Additional commands:
  *        cls - clear Console screen
@@ -36,7 +37,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
  *        dir <path\mask> - lists subdirs and files matched the mask
  *        echo <text> - prints a text in the Console
  *        if <condition> goto <label> - jumps to the label if the condition is true
+ *        if~ <condition> goto <label> - calculates and checks the condition
  *        if ... else if ... else ... endif - conditional execution
+ *        if~ ... else if~ ... else ... endif - conditional execution
  *        goto <label> - jumps to the label
  *        exit - exits the current NppExec's script
  *        exit <type> - exits the NppExec's script
@@ -55,9 +58,12 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
  *        set <var> ~ strfind <s> <t> - returns the first position of <t> in <s>
  *        set <var> ~ strrfind <s> <t> - returns the last position of <t> in <s>
  *        set <var> ~ strreplace <s> <t0> <t1> - replaces all <t0> with <t1>
- *        set <var> ~ strquote <s>  -  surrounds <s> with "" quotes
- *        set <var> ~ strunquote <s>  -  removes the surrounding "" quotes
- *        set <var> ~ normpath <path>  -  returns a normalized path
+ *        set <var> ~ strquote <s> - surrounds <s> with "" quotes
+ *        set <var> ~ strunquote <s> - removes the surrounding "" quotes
+ *        set <var> ~ strescape <s> - simple character escaping (e.g. <TAB> to '\t')
+ *        set <var> ~ strunescape <s> - simple character unescaping (e.g. '\n' to <LF>)
+ *        set <var> ~ strexpand <s> - expands all $(sub) values within <s>
+ *        set <var> ~ normpath <path> - returns a normalized path
  *        set <var> ~ strfromhex <hs> - returns a string from the hex-string
  *        set <var> ~ strtohex <s> - returns a hex-string from the string
  *        set <var> ~ chr <n> - returns a character from a character code <n>
@@ -71,15 +77,20 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
  *        unset local <var> - removes user's local variable <var>
  *        env_set <var> - shows the value of environment variable <var>
  *        env_set <var> = <value> - sets the value of environment variable <var>
+ *        env_set local ... - sets an environment variable locally         (**)
  *        env_unset <var> - removes/restores the environment variable <var>
  *        inputbox "message" - shows InputBox, sets $(INPUT)
  *        inputbox "message" : initial_value - InputBox, sets $(INPUT)
  *        inputbox "message" : "value_name" : initial_value - InputBox customization
+ *        inputbox "message" : "value_name" : "initial_value" : time_ms - expirable
  *        messagebox "text" - shows a simple MessageBox
  *        messagebox "text" : "title" - shows a MessageBox with a custom title
  *        messagebox "text" : "title" : type - shows a MessageBox of a given type
+ *        messagebox "text" : "title" : type : time_ms - expirable MessageBox
  *        con_colour <colours> - sets the Console's colours
+ *        con_colour local ... - sets the colours locally                  (**)
  *        con_filter <filters> - enables/disables the Console's output filters
+ *        con_filter local ... - sets the filters locally                  (**)
  *        con_loadfrom <file> - loads a file's content to the Console
  *        con_load <file> - see "con_loadfrom"
  *        con_saveto <file> - saves the Console's content to a file
@@ -91,20 +102,22 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
  *        sel_save <file> : <encoding> - see "sel_saveto"
  *        sel_settext <text> - replace current selection with the text specified
  *        sel_settext+ <text> - replace current selection with the text specified
- *        text_loadfrom <file> - replace the whole text with a file's content
+ *        text_loadfrom <file> - replace the entire text with a file's content
  *        text_load <file> - see "text_loadfrom"
- *        text_saveto <file> - save the whole text to a file
- *        text_saveto <file> : <encoding> - save the whole text to a file
+ *        text_saveto <file> - save the entire text to a file
+ *        text_saveto <file> : <encoding> - save the entire text to a file
  *        text_save <file> : <encoding> - see "text_saveto"
  *        clip_settext <text> : set the clipboard text
  *        npp_exec <script> - execute commands from specified NppExec's script
  *        npp_exec <file> - execute commands from specified NppExec's file (*)
+ *        npp_exectext <mode> <text> - execute the given text
  *        npp_close - close current file in Notepad++
  *        npp_close <file> - close specified file opened in Notepad++      (*)
  *        npp_console <on/off/keep> - show/hide the Console window
  *        npp_console <enable/disable> - enable/disable output to the Console
  *        npp_console <1/0/?> - show/hide the Console window
  *        npp_console <+/-> - enable/disable output to the Console
+ *        npp_console local ... - Console on/off locally                   (**)
  *        npp_menucommand <menu\item\name> - executes (invokes) a menu item
  *        npp_open <file> - open a file in Notepad++
  *        npp_open <mask> - open files matched the mask
@@ -125,6 +138,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
  *        sci_sendmsg <msg> <wparam> <lparam> - msg to Scintilla
  *        sci_find <flags> <find_what> - find a string
  *        sci_replace <flags> <find_what> <replace_with> - replace a string
+ *        proc_input <string> - send a string to a child process
  *        proc_signal <signal> - signal to a child process
  *        sleep <ms> - sleep for ms milliseconds
  *        sleep <ms> <text> - print the text and sleep for ms milliseconds
@@ -133,15 +147,20 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
  *        npe_cmdalias <alias> = - removes the command alias
  *        npe_cmdalias <alias> = <command> - sets the command alias
  *        npe_console <options> - set/modify Console options/mode
+ *        npe_console local ... - sets Console's mode locally              (**)
  *        npe_debuglog <on/off> - enable/disable Debug Log
+ *        npe_debuglog local ... - enable/disable Debug Log locally        (**)
  *        npe_debug <1/0> - see "npe_debuglog"
  *        npe_noemptyvars <1/0> - enable/disable replacement of empty vars
+ *        npe_noemptyvars local ... - sets empty vars on/off locally       (**)
  *        npe_queue <command> - queue NppExec's command to be executed
  *        npe_sendmsgbuflen <max_len> - set npp/sci_sendmsg's buffer length
+ *        npe_sendmsgbuflen local ... - sets the buffer length locally     (**)
  *        nppexec: - prefix for NppExec's commands (e.g. "nppexec:npp_console off")
  *        nppexec:: - always executes a command in a collateral (parallel) script
  *        (*) these commands work with a partial file path/name also
  *            i.e.  npp_save c:\dir\f.txt  is the same as  npp_save f.txt
+ *        (**) within the current NppExec's script
  *   5) Additional console commands (Console Dlg only):
  *        help           - show available commands
  *        help <command> - information on the specific command (e.g. "help cls")
@@ -162,8 +181,10 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
  *        $(NPP_FULL_FILE_PATH) : full path to notepad++.exe
  *        $(CURRENT_WORD)       : word(s) you selected in Notepad++
  *        $(CURRENT_LINE)       : current line number
+ *        $(CURRENT_LINESTR)    : text of the current line
  *        $(CURRENT_COLUMN)     : current column number
  *   7) Additional environment variables:
+ *        $(SELECTED_TEXT)      : the text you selected in Notepad++
  *        $(FILE_NAME_AT_CURSOR): file name selected in the editor
  *        $(WORKSPACE_ITEM_PATH): full path to the current item in the workspace pane
  *        $(WORKSPACE_ITEM_DIR) : directory containing the current item in the workspace pane
@@ -190,6 +211,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
  *        $(OUTPUTL)            : last line in $(OUTPUT)
  *        $(EXITCODE)           : exit code of the last executed child process
  *        $(PID)                : process id of the current (or the last) child process
+ *        $(IS_PROCESS)         : is child process running (1 - yes, 0 - no)
  *        $(LAST_CMD_RESULT)    : result of the last NppExec's command
  *                                  (1 - succeeded, 0 - failed, -1 - invalid arg)
  *        $(MSG_RESULT)         : result of 'npp_sendmsg[ex]' or 'sci_sendmsg'
@@ -197,6 +219,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
  *        $(MSG_LPARAM)         : lParam (output) of 'npp_sendmsg[ex]' or 'sci_sendmsg'
  *        $(NPP_HWND)           : Notepad++'s main window handle
  *        $(SCI_HWND)           : current Scintilla's window handle
+ *        $(SCI_HWND1)          : primary Scintilla's window handle (main view)
+ *        $(SCI_HWND2)          : secondary Scintilla's window handle (second view)
  *        $(CON_HWND)           : NppExec's Console window handle (RichEdit control)
  *        $(FOCUSED_HWND)       : focused window handle
  *        $(SYS.<var>)          : system's environment variable, e.g. $(SYS.PATH)
@@ -218,10 +242,10 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "DlgConsoleEncoding.h"
 #include "cpp/CFileBufT.h"
 #include "cpp/StrSplitT.h"
-#include "c_base/MatchMask.h"
-#include "c_base/HexStr.h"
 #include "CFileModificationChecker.h"
 #include "encodings/SysUniConv.h"
+#include "c_base/MatchMask.h"
+#include "c_base/HexStr.h"
 #include "c_base/str_func.h"
 #include "c_base/int2str.h"
 
@@ -245,7 +269,10 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 TCHAR PLUGIN_NAME[MAX_PLUGIN_NAME] = _T("NppExec");
 TCHAR PLUGIN_NAME_DLL[MAX_PLUGIN_NAME + 6] = _T("NppExec.dll");
 TCHAR INI_FILENAME[MAX_PLUGIN_NAME + 6] = _T("NppExec.ini");
-TCHAR CONSOLE_DLG_TITLE[MAX_PLUGIN_NAME + 10] = _T(" Console ");
+TCHAR CONSOLE_DLG_TITLE[MAX_PLUGIN_NAME + 10] = _T("Console");
+TCHAR EXECUTE_DLG_TITLE[MAX_PLUGIN_NAME + 10] = _T("Execute Script...");
+TCHAR DO_EXEC_MENU_ITEM[MAX_PLUGIN_NAME + 10] = _T("Execute Script...");
+TCHAR DIRECT_EXEC_MENU_ITEM[MAX_PLUGIN_NAME + 10] = _T("Execute Previous Script");
 TCHAR SHOW_CONSOLE_MENU_ITEM[MAX_PLUGIN_NAME + 10] = _T("Show Console");
 TCHAR TOGGLE_CONSOLE_MENU_ITEM[MAX_PLUGIN_NAME + 10] = _T("Toggle Console");
 
@@ -269,9 +296,11 @@ const TCHAR INI_SECTION_USERMENU[]         = _T("UserMenu");
 const TCHAR INI_SECTION_INPUTBOX[]         = _T("InputBox");
 const TCHAR INI_SECTION_EXITBOX[]          = _T("ExitBox");
 const TCHAR INI_SECTION_RESTORE[]          = _T("Restore");
+const TCHAR INI_SECTION_EXECDLG[]          = _T("ExecDlg");
 
-const TCHAR SCRIPTFILE_TEMP[]              = _T("npes_temp.txt");
-const TCHAR SCRIPTFILE_SAVED[]             = _T("npes_saved.txt");
+TCHAR       SCRIPTFILE_TEMP[100]           = _T("npes_temp.txt\0");
+TCHAR       SCRIPTFILE_LAST[100]           = _T("npes_last.txt\0");
+TCHAR       SCRIPTFILE_SAVED[100]          = _T("npes_saved.txt\0");
 TCHAR       CMDHISTORY_FILENAME[100]       = _T("npec_cmdhistory.txt\0");
 const TCHAR PROP_NPPEXEC_DLL[]             = _T("NppExec_dll_exists");
 
@@ -286,6 +315,7 @@ const int   DEFAULT_PATH_AUTODBLQUOTES        = 0;
 const int   DEFAULT_CMDHISTORY_MAXITEMS       = 256;
 const int   DEFAULT_EXEC_MAXCOUNT             = 100;
 const int   DEFAULT_GOTO_MAXCOUNT             = 10000;
+const int   DEFAULT_EXECTEXT_MAXCOUNT         = 500;
 const int   DEFAULT_RICHEDIT_MAXTEXTLEN       = 4*1024*1024; // 4 MB
 const int   DEFAULT_SENDMSG_MAXBUFLEN         = 4*1024*1024; // 4 M symbols
 const int   DEFAULT_UTF8_DETECT_LENGTH        = 16384;
@@ -296,6 +326,8 @@ const TCHAR DEFAULT_LOGSDIR[]                 = _T("");
 const TCHAR DEFAULT_SCRIPTSDIR[]              = _T("");
 const TCHAR DEFAULT_CHILDP_COMSPECSWITCHES[]  = _T("/C");
 const int   DEFAULT_AUTOSAVE_SECONDS          = 0; // disabled (example: 5*60 = 5 minutes)
+const int   DEFAULT_EXECCLIPTEXTMODE          = (CNppExec::etfCollateralNoChildProc | CNppExec::etfCollateralWithChildProc | CNppExec::etfNppExecPrefix | CNppExec::etfLastScript);
+const int   DEFAULT_EXECSELTEXTMODE           = (CNppExec::etfCollateralNoChildProc | CNppExec::etfCollateralWithChildProc | CNppExec::etfNppExecPrefix | CNppExec::etfLastScript);
 
 const wchar_t DEFAULT_NULCHAR_UNICODE     = 0x25E6; // 0x25E6 - the "White Bullet" symbol
 const char    DEFAULT_NULCHAR_ANSI        = 0x17; // 0x17 - the "End of Text Block" symbol
@@ -310,6 +342,8 @@ const CStaticOptionsManager::OPT_ITEM optArray[OPT_COUNT] = {
       INI_SECTION_OPTIONS, _T("ToolbarBtn"), 1, NULL },
     { OPTB_WATCHSCRIPTFILE, OPTT_BOOL | OPTF_READWRITE,
       INI_SECTION_OPTIONS, _T("WatchScriptFile"), 1, NULL },
+    { OPTB_SAVELASTSCRIPT, OPTT_BOOL | OPTF_READWRITE,
+      INI_SECTION_OPTIONS, _T("SaveLastScript"), 1, NULL },
     { OPTS_SCRIPT_NPPSTART, OPTT_STR | OPTF_READWRITE,
       INI_SECTION_OPTIONS, _T("ScriptNppStart"), 0, NULL },
     { OPTS_SCRIPT_NPPEXIT, OPTT_STR | OPTF_READWRITE,
@@ -335,6 +369,8 @@ const CStaticOptionsManager::OPT_ITEM optArray[OPT_COUNT] = {
       INI_SECTION_CONSOLE, _T("CmdHistory"), -1, NULL },
     { OPTB_CONSOLE_SAVECMDHISTORY, OPTT_INT | OPTF_READWRITE,
       INI_SECTION_CONSOLE, _T("SaveCmdHistory"), -1, NULL },
+    { OPTB_CONSOLE_USEEDITORCOLORS, OPTT_BOOL | OPTF_READWRITE,
+      INI_SECTION_CONSOLE, _T("UseEditorColors"), 0, NULL },
 
     { OPTI_RICHEDIT_MAXTEXTLEN, OPTT_INT | OPTF_READONLY,
       INI_SECTION_CONSOLE, _T("RichEdit_MaxTextLength"),
@@ -367,14 +403,26 @@ const CStaticOptionsManager::OPT_ITEM optArray[OPT_COUNT] = {
       INI_SECTION_CONSOLE, _T("NoInternalMsgs"), -1, NULL },
     { OPTB_CONSOLE_PRINTMSGREADY, OPTT_INT | OPTF_READWRITE,
       INI_SECTION_CONSOLE, _T("PrintMsgReady"), -1, NULL },
+    { OPTS_CONSOLE_CUSTOMMSGREADY, OPTT_STR | OPTF_READONLY,
+      INI_SECTION_CONSOLE, _T("CustomMsgReady"), -1, _T("================ READY ================\\r") },
     { OPTD_CONSOLE_FONT, OPTT_DATA | OPTF_READWRITE,
       INI_SECTION_CONSOLE, _T("Font"), 0, NULL },
+    { OPTB_CONSOLE_KILLPROCTREE, OPTT_INT | OPTF_READWRITE,
+      INI_SECTION_CONSOLE, _T("KillProcTree"), -1, NULL },
     { OPTI_CONSOLE_ANSIESCSEQ, OPTT_INT | OPTF_READWRITE,
-      INI_SECTION_CONSOLE, _T("AnsiEscapeSequences") },
+      INI_SECTION_CONSOLE, _T("AnsiEscapeSequences"), 0, NULL },
+    { OPTI_CONSOLE_EXECCLIPTEXTMODE, OPTT_INT | OPTF_READWRITE,
+      INI_SECTION_CONSOLE, _T("ExecClipTextMode"),
+      DEFAULT_EXECCLIPTEXTMODE, NULL },
+    { OPTI_CONSOLE_EXECSELTEXTMODE, OPTT_INT | OPTF_READWRITE,
+      INI_SECTION_CONSOLE, _T("ExecSelTextMode"),
+      DEFAULT_EXECSELTEXTMODE, NULL },
 
     //[ConsoleOutputFilter]
     { OPTB_CONFLTR_ENABLE, OPTT_BOOL | OPTF_READWRITE,
       INI_SECTION_CONSOLEFILTER, _T("Enable"), 0, NULL },
+    { OPTB_CONFLTR_COMPILER_ERRORS, OPTT_BOOL | OPTF_READWRITE,
+      INI_SECTION_CONSOLEFILTER, _T("CompilerErrors"), 0, NULL },
     { OPTB_CONFLTR_EXCLALLEMPTY, OPTT_BOOL | OPTF_READWRITE,
       INI_SECTION_CONSOLEFILTER, _T("ExcludeAllEmpty"), 0, NULL },
     { OPTB_CONFLTR_EXCLDUPEMPTY, OPTT_BOOL | OPTF_READWRITE,
@@ -1001,13 +1049,26 @@ const CStaticOptionsManager::OPT_ITEM optArray[OPT_COUNT] = {
       INI_SECTION_EXITBOX, _T("I18"), 0, NULL },
     { OPTS_EXITBOX_VALUE20, OPTT_STR | OPTF_READWRITE,
       INI_SECTION_EXITBOX, _T("I19"), 0, NULL },
-      
+
+    // [ExecDlg]
+    { OPTD_EXECDLG_FONT, OPTT_DATA | OPTF_READWRITE,
+      INI_SECTION_EXECDLG, _T("Font"), 0, NULL },
+
     // --- read-only options ---
 
     // [Options]
     { OPTS_PLUGIN_HELPFILE, OPTT_STR | OPTF_READONLY,
       INI_SECTION_OPTIONS, _T("HelpFile"),
       0, DEFAULT_HELPFILE },
+    { OPTS_PLUGIN_TEMPSCRIPTFILE, OPTT_STR | OPTF_READONLY,
+      INI_SECTION_OPTIONS, _T("TempScriptFile"),
+      0, SCRIPTFILE_TEMP },
+    { OPTS_PLUGIN_LASTSCRIPTFILE, OPTT_STR | OPTF_READONLY,
+      INI_SECTION_OPTIONS, _T("LastScriptFile"),
+      0, SCRIPTFILE_LAST },
+    { OPTS_PLUGIN_SAVEDSCRIPTSFILE, OPTT_STR | OPTF_READONLY,
+      INI_SECTION_OPTIONS, _T("SavedScriptsFile"),
+      0, SCRIPTFILE_SAVED },
     { OPTS_PLUGIN_LOGSDIR, OPTT_STR | OPTF_READONLY,
       INI_SECTION_OPTIONS, _T("LogsDir"),
       0, DEFAULT_LOGSDIR },
@@ -1017,6 +1078,7 @@ const CStaticOptionsManager::OPT_ITEM optArray[OPT_COUNT] = {
     { OPTU_PLUGIN_AUTOSAVE_SECONDS, OPTT_INT | OPTF_READONLY,
       INI_SECTION_OPTIONS, _T("AutoSave_Seconds"),
       DEFAULT_AUTOSAVE_SECONDS, NULL },
+
     // [Console]
     { OPTU_CHILDP_STARTUPTIMEOUT_MS, OPTT_INT | OPTF_READONLY,
       INI_SECTION_CONSOLE, _T("ChildProcess_StartupTimeout_ms"), 
@@ -1054,6 +1116,9 @@ const CStaticOptionsManager::OPT_ITEM optArray[OPT_COUNT] = {
     { OPTI_GOTO_MAXCOUNT, OPTT_INT | OPTF_READONLY,
       INI_SECTION_CONSOLE, _T("GoTo_MaxCount"),
       DEFAULT_GOTO_MAXCOUNT, NULL },
+    { OPTI_EXECTEXT_MAXCOUNT, OPTT_INT | OPTF_READONLY,
+      INI_SECTION_CONSOLE, _T("ExecText_MaxCount"), 
+      DEFAULT_EXECTEXT_MAXCOUNT, NULL },
     { OPTB_CONSOLE_NOEMPTYVARS, OPTT_BOOL | OPTF_READONLY,
       INI_SECTION_CONSOLE, _T("NoEmptyVars"), 1, NULL },
     { OPTS_ALIAS_CMD_NPPEXEC, OPTT_STR | OPTF_READONLY,
@@ -1121,13 +1186,14 @@ extern WNDPROC                  nppOriginalWndProc;
 extern CConsoleOutputFilterDlg  ConsoleOutputFilterDlg;
 extern CConsoleEncodingDlg      ConsoleEncodingDlg;
 extern CInputBoxDlg             InputBoxDlg;
-extern CFileModificationChecker g_scriptFileChecker;
 
 
 void empty_func()           { /* empty function */ }
 void cmdhistory_func()      { Runtime::GetNppExec().OnCmdHistory(); }
 void do_exec_dlg_func()     { Runtime::GetNppExec().OnDoExecDlg(); }
 void direct_exec_func()     { Runtime::GetNppExec().OnDirectExec(tstr(), true, CScriptEngine::rfConsoleLocalVarsRead); }
+void exec_seltext_func()    { Runtime::GetNppExec().OnExecSelText(); }
+void exec_cliptext_func()   { Runtime::GetNppExec().OnExecClipText(); }
 void show_console_func()    { Runtime::GetNppExec().OnShowConsoleDlg(); }
 void toggle_console_func()  { Runtime::GetNppExec().OnToggleConsoleDlg(); }
 void go_to_next_error()     { Runtime::GetNppExec().OnGoToNextError(); }
@@ -1346,8 +1412,13 @@ void scroll2latest_func() { Runtime::GetNppExec().OnScrollToLatest(); }
 #endif
 
 void int_msgs_func()      { Runtime::GetNppExec().OnNoInternalMsgs(); }
+
+#ifdef _DISABLE_CMD_ALIASES
 void nocmdaliases_func()  { Runtime::GetNppExec().OnNoCmdAliases(); }
-void console_font_func()  { Runtime::GetNppExec().OnSelectConsoleFont(); } 
+#endif
+
+void console_font_func()  { Runtime::GetNppExec().OnSelectConsoleFont(); }
+void execdlg_font_func()  { Runtime::GetNppExec().OnSelectExecDlgFont(); }
 void help_manual_func()   { Runtime::GetNppExec().OnHelpManual(); }
 void help_docs_func()     { Runtime::GetNppExec().OnHelpDocs(); }
 void help_about_func()    { Runtime::GetNppExec().OnHelpAbout(); }
@@ -1390,13 +1461,16 @@ void globalInitialize()
   InitShortcut(N_TOGGLECONSOLE, false, true,  false, VK_OEM_3); // the '~' key
 
   // init menu items:
-  InitFuncItem(N_DO_EXEC_DLG,     _T("Execute..."),                    do_exec_dlg_func,    &g_funcShortcut[N_DO_EXEC_DLG]);
-  InitFuncItem(N_DIRECT_EXEC,     _T("Direct Execute Previous"),       direct_exec_func,    &g_funcShortcut[N_DIRECT_EXEC]);
+  InitFuncItem(N_DO_EXEC_DLG,     DO_EXEC_MENU_ITEM,                   do_exec_dlg_func,    &g_funcShortcut[N_DO_EXEC_DLG]);
+  InitFuncItem(N_DIRECT_EXEC,     DIRECT_EXEC_MENU_ITEM,               direct_exec_func,    &g_funcShortcut[N_DIRECT_EXEC]);
+  InitFuncItem(N_EXEC_SELTEXT,    _T("Execute Selected Text"),         exec_seltext_func,   &g_funcShortcut[N_EXEC_SELTEXT]);
+  InitFuncItem(N_EXEC_CLIPTEXT,   _T("Execute Clipboard Text"),        exec_cliptext_func,  &g_funcShortcut[N_EXEC_CLIPTEXT]);
+  InitFuncItem(N_SEPARATOR_1,     _T(""),                              /*empty_func*/NULL,  NULL);
   InitFuncItem(N_SHOWCONSOLE,     SHOW_CONSOLE_MENU_ITEM,              show_console_func,   &g_funcShortcut[N_SHOWCONSOLE]);
   InitFuncItem(N_TOGGLECONSOLE,   TOGGLE_CONSOLE_MENU_ITEM,            toggle_console_func, &g_funcShortcut[N_TOGGLECONSOLE]);
   InitFuncItem(N_GOTO_NEXT_ERROR, _T("Go to next error"),              go_to_next_error,    NULL);
   InitFuncItem(N_GOTO_PREV_ERROR, _T("Go to previous error"),          go_to_prev_error,    NULL);
-  InitFuncItem(N_SEPARATOR_1,     _T(""),                              /*empty_func*/NULL,  NULL);
+  InitFuncItem(N_SEPARATOR_2,     _T(""),                              /*empty_func*/NULL,  NULL);
   InitFuncItem(N_CMDHISTORY,      _T("Console Commands History"),      cmdhistory_func,     NULL);
   InitFuncItem(N_CONSOLE_ENC,     _T("Console Output..."),             console_enc_func,    NULL);
 
@@ -1407,12 +1481,17 @@ void globalInitialize()
   InitFuncItem(N_NOINTMSGS,       _T("No internal messages"),          int_msgs_func,       NULL);
   InitFuncItem(N_SAVEONEXECUTE,   _T("Save all files on execute"),     saveonexecute_func,  NULL);
   InitFuncItem(N_CDCURDIR,        _T("Follow $(CURRENT_DIRECTORY)"),   cdcurdir_func,       NULL);
+
+#ifdef _DISABLE_CMD_ALIASES
   InitFuncItem(N_NOCMDALIASES,    _T("Disable command aliases"),       nocmdaliases_func,   &g_funcShortcut[N_NOCMDALIASES]);
-  InitFuncItem(N_SEPARATOR_2,     _T(""),                              /*empty_func*/NULL,  NULL);
+#endif
+
+  InitFuncItem(N_SEPARATOR_3,     _T(""),                              /*empty_func*/NULL,  NULL);
   InitFuncItem(N_OUTPUT_FILTER,   _T("Console Output Filters..."),     output_f_func,       &g_funcShortcut[N_OUTPUT_FILTER]);
   InitFuncItem(N_ADV_OPTIONS,     _T("Advanced Options..."),           adv_opt_func,        NULL);
   InitFuncItem(N_CONSOLE_FONT,    _T("Change Console Font..."),        console_font_func,   NULL);
-  InitFuncItem(N_SEPARATOR_3,     _T(""),                              /*empty_func*/NULL,  NULL);
+  InitFuncItem(N_EXECDLG_FONT,    _T("Change Execute Script Font..."), execdlg_font_func,   NULL);
+  InitFuncItem(N_SEPARATOR_4,     _T(""),                              /*empty_func*/NULL,  NULL);
   InitFuncItem(N_HELP_MANUAL,     _T("Help/Manual"),                   help_manual_func,    NULL);
   InitFuncItem(N_HELP_DOCS,       _T("Help/Docs..."),                  help_docs_func,      NULL);
   InitFuncItem(N_HELP_ABOUT,      _T("Help/About..."),                 help_about_func,     NULL);
@@ -1432,8 +1511,9 @@ void globalInitialize()
         szMenuItem[len] = 0;
       if ( (len < 0) && (lstrcmp(szMenuItem, cszUserMenuSeparator) == 0) )
       {
+        // separator
         InitFuncItem(nbFunc + g_nUserMenuItems + 1, // g_funcItem[nbFunc] is a separator
-          _T(""), empty_func, NULL); // separator, use empty_func here!!!
+          _T(""), empty_func, NULL); // empty_func is used here to be able to move this menu item (see RemoveMenu)
       }
       else
       {
@@ -1447,7 +1527,7 @@ void globalInitialize()
   if ( g_nUserMenuItems > 0 )
   {
     // separator
-    InitFuncItem(nbFunc, _T(""), empty_func, NULL); // <-- use empty_func here!!!
+    InitFuncItem(nbFunc, _T(""), empty_func, NULL); // empty_func is used here to be able to move this menu item (see RemoveMenu)
   }
 
   g_bInitialized = true;
@@ -1480,6 +1560,12 @@ extern "C" BOOL APIENTRY DllMain(
   {
     case DLL_PROCESS_ATTACH:
     {
+#ifndef __MINGW32__
+  #ifdef _DEBUG
+      _CrtSetDbgFlag(_CRTDBG_ALLOC_MEM_DF | _CRTDBG_LEAK_CHECK_DF);
+      //_CrtSetBreakAlloc(2697);
+  #endif
+#endif
       g_bInitialized = false;
       CNppExec::_bIsNppReady = false;
 
@@ -1523,9 +1609,9 @@ extern "C" __declspec(dllexport) void setInfo(NppData notpadPlusData)
     }
     ::SetProp(notpadPlusData._nppHandle, PROP_NPPEXEC_DLL, NppExec.m_hDllModule);
 
-    int ver = (int) ::SendMessage(notpadPlusData._nppHandle, NPPM_GETNPPVERSION, 0, 0);
-    if ( (HIWORD(ver) < 5) ||
-         ((HIWORD(ver) == 5) && (LOWORD(ver) < 1)) )
+    DWORD dwVer = (DWORD) ::SendMessage(notpadPlusData._nppHandle, NPPM_GETNPPVERSION, 0, 0);
+    if ( (HIWORD(dwVer) < 5) ||
+         ((HIWORD(dwVer) == 5) && (LOWORD(dwVer) < 1)) )
     {
       ::MessageBox(
           notpadPlusData._nppHandle, 
@@ -1681,6 +1767,9 @@ extern "C" __declspec(dllexport) void beNotified(SCNotification *notifyCode)
                 ModifyMenu(hMenu, g_funcItem[N_SEPARATOR_3]._cmdID, 
                   MF_BYCOMMAND | MF_SEPARATOR, g_funcItem[N_SEPARATOR_3]._cmdID, NULL);
 
+                ModifyMenu(hMenu, g_funcItem[N_SEPARATOR_4]._cmdID, 
+                  MF_BYCOMMAND | MF_SEPARATOR, g_funcItem[N_SEPARATOR_4]._cmdID, NULL);
+
                 if ( g_nUserMenuItems > 0 )
                 {
                     TCHAR        szItemText[128];
@@ -1741,10 +1830,10 @@ extern "C" __declspec(dllexport) void beNotified(SCNotification *notifyCode)
                 CheckMenuItem(hMenu, g_funcItem[N_CMDHISTORY]._cmdID,
                   MF_BYCOMMAND | (NppExec.GetOptions().GetBool(OPTB_CONSOLE_CMDHISTORY) ? MF_CHECKED : MF_UNCHECKED));
 
-#ifdef _SCROLL_TO_LATEST        
+            #ifdef _SCROLL_TO_LATEST        
                 CheckMenuItem(hMenu, g_funcItem[N_SCROLL2LATEST]._cmdID,
                   MF_BYCOMMAND | (NppExec.GetOptions().GetBool(OPTB_CONSOLE_SCROLL2LATEST) ? MF_CHECKED : MF_UNCHECKED));
-#endif
+            #endif
 
                 CheckMenuItem(hMenu, g_funcItem[N_NOINTMSGS]._cmdID,
                   MF_BYCOMMAND | (NppExec.GetOptions().GetBool(OPTB_CONSOLE_NOINTMSGS) ? MF_CHECKED : MF_UNCHECKED));
@@ -1760,8 +1849,10 @@ extern "C" __declspec(dllexport) void beNotified(SCNotification *notifyCode)
                 CheckMenuItem(hMenu, g_funcItem[N_CDCURDIR]._cmdID,
                   MF_BYCOMMAND | (NppExec.GetOptions().GetBool(OPTB_CONSOLE_CDCURDIR) ? MF_CHECKED : MF_UNCHECKED));
 
+            #ifdef _DISABLE_CMD_ALIASES
                 EnableMenuItem(hMenu, g_funcItem[N_NOCMDALIASES]._cmdID,
                   MF_BYCOMMAND | MF_GRAYED );
+            #endif
 
                 /*
                 EnableMenuItem(hMenu, g_funcItem[N_CONSOLE_FONT]._cmdID,
@@ -1813,6 +1904,12 @@ extern "C" __declspec(dllexport) void beNotified(SCNotification *notifyCode)
             CNppExec::_bIsNppShutdown = true; // Notepad++ is shutting down; no more Console output
             NppExec._consoleIsVisible = false; // stopping every script (except the exit script, if any) & child process
 
+            if ( NppExec.GetOptions().GetBool(OPTB_WATCHSCRIPTFILE) )
+            {
+                NppExec.m_FileWatcher.StopWatching();
+                Runtime::GetLogger().Add_WithoutOutput( _T("; CFileModificationWatcher - stopped") );
+            }
+
             NppExec.RunTheExitScript();
 
             if ( ::GetProp(NppExec.m_nppData._nppHandle, PROP_NPPEXEC_DLL) )
@@ -1858,20 +1955,68 @@ extern "C" __declspec(dllexport) void beNotified(SCNotification *notifyCode)
             const int nToolbarBtn = NppExec.GetOptions().GetInt(OPTI_TOOLBARBTN);
             if ( nToolbarBtn )
             {
-                NppExec.m_TB_Icon.hToolbarBmp = (HBITMAP) ::LoadImage( 
-                  (HINSTANCE) NppExec.m_hDllModule, MAKEINTRESOURCE(IDI_CONSOLEBITMAP), 
-                    IMAGE_BITMAP, 0, 0, LR_DEFAULTSIZE | LR_LOADMAP3DCOLORS );
-
                 int cmdID = g_funcItem[N_SHOWCONSOLE]._cmdID;
                 if ( nToolbarBtn == 2 )
                     cmdID = g_funcItem[N_DO_EXEC_DLG]._cmdID;
                 else if ( nToolbarBtn == 3 )
                     cmdID = g_funcItem[N_DIRECT_EXEC]._cmdID;
-                NppExec.SendNppMsg( NPPM_ADDTOOLBARICON, 
-                  (WPARAM) cmdID, (LPARAM) &NppExec.m_TB_Icon );
+                else if ( nToolbarBtn == 4 )
+                    cmdID = g_funcItem[N_EXEC_SELTEXT]._cmdID;
+                else if ( nToolbarBtn == 5 )
+                    cmdID = g_funcItem[N_EXEC_CLIPTEXT]._cmdID;
+
+                DWORD dwVer = (DWORD) NppExec.SendNppMsg(NPPM_GETNPPVERSION);
+                if ( HIWORD(dwVer) >= 8 )
+                {
+                    NppExec.m_TB_IconsWithDarkMode.hToolbarBmp = (HBITMAP) ::LoadImage( 
+                      (HINSTANCE) NppExec.m_hDllModule, MAKEINTRESOURCE(IDI_CONSOLEBITMAP), 
+                      IMAGE_BITMAP, 0, 0, LR_DEFAULTSIZE | LR_LOADMAP3DCOLORS
+                    );
+
+                    NppExec.m_TB_IconsWithDarkMode.hToolbarIcon = (HICON) ::LoadImage( 
+                      (HINSTANCE) NppExec.m_hDllModule, MAKEINTRESOURCE(IDI_CONSOLEICON), 
+                      IMAGE_ICON, 0, 0, LR_DEFAULTSIZE | LR_LOADMAP3DCOLORS
+                    );
+
+                    NppExec.m_TB_IconsWithDarkMode.hToolbarIconDarkMode = (HICON) ::LoadImage( 
+                      (HINSTANCE) NppExec.m_hDllModule, MAKEINTRESOURCE(IDI_CONSOLEICONDARK), 
+                      IMAGE_ICON, 0, 0, LR_DEFAULTSIZE | LR_LOADMAP3DCOLORS
+                    );
+
+                    NppExec.SendNppMsg( NPPM_ADDTOOLBARICON_FORDARKMODE, (WPARAM) cmdID, (LPARAM) &NppExec.m_TB_IconsWithDarkMode );
+                }
+                else
+                {
+                    NppExec.m_TB_Icons.hToolbarBmp = (HBITMAP) ::LoadImage( 
+                      (HINSTANCE) NppExec.m_hDllModule, MAKEINTRESOURCE(IDI_CONSOLEBITMAP), 
+                      IMAGE_BITMAP, 0, 0, LR_DEFAULTSIZE | LR_LOADMAP3DCOLORS
+                    );
+
+                    NppExec.m_TB_Icons.hToolbarIcon = (HICON) ::LoadImage( 
+                      (HINSTANCE) NppExec.m_hDllModule, MAKEINTRESOURCE(IDI_CONSOLEICON), 
+                      IMAGE_ICON, 0, 0, LR_DEFAULTSIZE | LR_LOADMAP3DCOLORS
+                    );
+
+                    NppExec.SendNppMsg( NPPM_ADDTOOLBARICON_DEPRECATED, (WPARAM) cmdID, (LPARAM) &NppExec.m_TB_Icons );
+                }
             }
         } // NPPN_TBMODIFICATION
     
+    }
+    else
+    {
+        switch ( notifyCode->nmhdr.code )
+        {
+            case SCN_PAINTED:
+            {
+                CNppExecConsole& NppExecConsole = Runtime::GetNppExec().GetConsole();
+                if ( NppExecConsole.GetDialogWnd() && ::IsWindowVisible(NppExecConsole.GetDialogWnd()) )
+                {
+                    NppExecConsole.ApplyEditorColours(true);
+                }
+                break;
+            }
+        }
     }
 
 }
@@ -1902,16 +2047,21 @@ extern "C" __declspec(dllexport) BOOL isUnicode()
 bool CNppExec::_bIsNppReady = false;
 bool CNppExec::_bIsNppShutdown = false;
 
-CNppExec::CNppExec() 
-  : m_Options(_T("NppExec"), optArray, OPT_COUNT)
+CNppExec::CNppExec() :
+  m_Options(_T("NppExec"), optArray, OPT_COUNT),
+  m_ScriptFileChangeListener(&m_ScriptsList)
 {
     m_CommandExecutor.SetNppExec(this);
     m_PluginInterfaceImpl.SetNppExec(this);
     //m_Console.SetNppExec(this);
     m_MacroVars.SetNppExec(this);
 
-    m_TB_Icon.hToolbarBmp = NULL;
-    m_TB_Icon.hToolbarIcon = NULL;
+    m_TB_Icons.hToolbarBmp = NULL;
+    m_TB_Icons.hToolbarIcon = NULL;
+
+    m_TB_IconsWithDarkMode.hToolbarBmp = NULL;
+    m_TB_IconsWithDarkMode.hToolbarIcon = NULL;
+    m_TB_IconsWithDarkMode.hToolbarIconDarkMode = NULL;
 
     npp_nbFiles = 0;
     npp_bufFileNames.Clear();
@@ -1919,6 +2069,7 @@ CNppExec::CNppExec()
     _bStopTheExitScript = false;
     _bOptionsSavedOnNppnShutdown = false;
 
+    _execdlgFont = NULL;
     _consoleFont = NULL;
     _consoleIsVisible = false;
     _consoleCommandBreak = false;
@@ -1938,12 +2089,29 @@ CNppExec::CNppExec()
     m_isSavingOptions = false;
 
     m_hFocusedWindowBeforeScriptStarted = NULL;
+
+    m_lpMsgBoxTimeoutFunc = NULL;
+
+    HMODULE hUser32 = ::GetModuleHandle(_T("user32"));
+    if ( hUser32 )
+    {
+    #ifdef UNICODE
+        const char* szMsgBoxTimeOutName = "MessageBoxTimeoutW";
+    #else
+        const char* szMsgBoxTimeOutName = "MessageBoxTimeoutA";
+    #endif
+
+        m_lpMsgBoxTimeoutFunc = (MSGBOXTIMEOUTFUNC) ::GetProcAddress(hUser32, szMsgBoxTimeOutName);
+    }
 }
 
 CNppExec::~CNppExec()
 {
     if ( m_hRichEditDll != NULL )
         ::FreeLibrary(m_hRichEditDll);
+
+    if ( _execdlgFont != NULL )
+        ::DeleteObject(_execdlgFont);
 
     if ( _consoleFont != NULL )
         ::DeleteObject(_consoleFont);
@@ -1958,7 +2126,7 @@ CListT<tstr> CNppExec::GetCmdList() const
 void CNppExec::SetCmdList(const CListT<tstr>& CmdList)
 {
     CCriticalSectionLockGuard lock(m_csScriptCmdList);
-    m_ScriptCmdList.Copy(CmdList);
+    m_ScriptCmdList.Assign(CmdList);
 }
 
 bool CNppExec::IsCmdListEmpty() const
@@ -2033,7 +2201,7 @@ int CNppExec::conLoadFrom(LPCTSTR cszFile)
 
     while ( _consoleIsVisible && (!_consoleCommandBreak) && (fbuf.GetLine(Line) >= 0) )
     {
-      GetConsole().PrintOutput(Line.c_str(), true);
+      GetConsole().PrintOutput(Line.c_str());
     }
 
     _consoleCommandIsRunning = false;
@@ -2127,15 +2295,7 @@ int CNppExec::textLoadFrom(LPCTSTR cszFile, bool bSelectionOnly)
 
 int CNppExec::textSaveTo(LPTSTR szFileAndEncoding, bool bSelectionOnly)
 {
-  enum eEnc {
-    encAsIs = 0,
-    encANSI,
-    encUTF8_BOM,
-    encUTF8_NoBOM,
-    encUCS2LE
-  };
-
-  int enc = encAsIs;
+  eTextEnc enc = encAsIs;
 
   if ( szFileAndEncoding && (szFileAndEncoding[0] == _T('\"')) )
       ++szFileAndEncoding; // skip first \"
@@ -2146,26 +2306,29 @@ int CNppExec::textSaveTo(LPTSTR szFileAndEncoding, bool bSelectionOnly)
   {
     if ( (szFileAndEncoding[i+1] != _T('\\')) && (szFileAndEncoding[i+1] != _T('/')) )
     {
-      TCHAR* p = c_base::_tstr_unsafe_skip_tabspaces(szFileAndEncoding + i + 1);
-      if ( *p )
+      TCHAR* p = szFileAndEncoding + i + 1;
+      while ( NppExecHelpers::IsAnySpaceChar(*p) )  ++p;
+      const TCHAR ch = NppExecHelpers::LatinCharUpper(*p);
+      if ( ch != 0 )
       {
-        if ( *p == _T('a') || *p == _T('A') )
+        if ( ch == _T('A') )
         {
           enc = encANSI;
         }
-        else if ( *p == _T('u') || *p == _T('U') )
+        else if ( ch == _T('U') )
         {
           if ( *(p + 1) == _T('-') )
             enc = encUTF8_NoBOM;
           else
             enc = encUTF8_BOM;
         }
-        else if ( *p == _T('w') || *p == _T('W') )
+        else if ( ch == _T('W') )
         {
           enc = encUCS2LE;
         }
       }
-      p = c_base::_tstr_unsafe_rskip_tabspaces(szFileAndEncoding, i);
+      p = szFileAndEncoding + i - 1;
+      while ( NppExecHelpers::IsAnySpaceChar(*p) )  --p;
       if ( *p == _T('\"') )
         *p = 0; // skip last \" in file name
       else
@@ -2198,118 +2361,63 @@ int CNppExec::textSaveTo(LPTSTR szFileAndEncoding, bool bSelectionOnly)
   }
   */
     
-  HWND hSci = GetScintillaHandle();
-  int nSciCodePage = (int) ::SendMessage(hSci, SCI_GETCODEPAGE, 0, 0);
-  INT_PTR nSciTextLen;
-  if ( bSelectionOnly )
-  {
-    INT_PTR nSciSelStart = (INT_PTR) ::SendMessage(hSci, SCI_GETSELECTIONSTART, 0, 0);
-    INT_PTR nSciSelEnd = (INT_PTR) ::SendMessage(hSci, SCI_GETSELECTIONEND, 0, 0);
-    nSciTextLen = nSciSelEnd - nSciSelStart;
-  }
-  else
-  {
-    nSciTextLen = (INT_PTR) ::SendMessage(hSci, SCI_GETTEXTLENGTH, 0, 0);
-  }
+  int   nSciCodePage = 0;
+  int   nTextLen = 0;
+  char* pSciText = sciGetText(bSelectionOnly, &nTextLen, &nSciCodePage);
 
-  if ( nSciTextLen > INT_MAX - 2 )
+  if ( !pSciText )
   {
     // text length exceeds 2 GB, whereas the character
     // conversion functions below are limited by 'int'
     return -2; 
   }
 
-  char* pSciText = new char[nSciTextLen + 2];
-  if ( pSciText )
+  int   nOutTextLen = 0;
+  char* pOutText = convertSciText(pSciText, nTextLen, nSciCodePage, enc, &nOutTextLen);
+
+  if ( pOutText != pSciText )
   {
-    char* pOutText = NULL;
-    int   nOutSize = 0;
-  
-    pSciText[0] = 0;
-    {
-      UINT uMsg = bSelectionOnly ? SCI_GETSELTEXT : SCI_GETTEXT;
-      WPARAM wParam = bSelectionOnly ? 0 : (nSciTextLen + 1);
-      ::SendMessage( hSci, uMsg, wParam, (LPARAM) pSciText );
-    }
-    
-    if ( nSciTextLen == 0 )
-    {
-      // no selected text / no text
-      pOutText = pSciText; // empty string in this case
-    }
-    else if ( nSciCodePage == SC_CP_UTF8 )
-    {
-      switch ( enc )
-      {
-        case encANSI:  // ANSI
-          pOutText = SysUniConv::newUTF8ToMultiByte(pSciText, -1, CP_ACP, &nOutSize);
-          delete [] pSciText;
-          break;
-        case encUCS2LE:  // Unicode
-          pOutText = (char *) SysUniConv::newUTF8ToUnicode(pSciText, -1, &nOutSize);
-          nOutSize *= 2;
-          delete [] pSciText;
-          break; 
-        default:
-          pOutText = pSciText;
-          nOutSize = lstrlenA(pOutText);
-          break;
-      }
-    }
-    else
-    {
-      // multi-byte encoding
-      if ( nSciCodePage == 0 )  nSciCodePage = CP_ACP;
-      switch ( enc )
-      {
-        case encUTF8_BOM:   // UTF-8
-        case encUTF8_NoBOM:
-          pOutText = SysUniConv::newMultiByteToUTF8(pSciText, -1, nSciCodePage, &nOutSize);
-          delete [] pSciText;
-          break;
-        case encUCS2LE:  // Unicode
-          pOutText = (char *) SysUniConv::newMultiByteToUnicode(pSciText, -1, nSciCodePage, &nOutSize);
-          nOutSize *= 2;
-          delete [] pSciText;
-          break; 
-        default:
-          pOutText = pSciText;
-          nOutSize = lstrlenA(pOutText);
-          break;
-      }
-    }
+    delete [] pSciText;
+    pSciText = nullptr;
+  }
 
-    if ( pOutText )
-    {
-      int nWritten = -1; // -1 means "failed to write"
+  if ( pOutText )
+  {
+    int nBytesWritten = -1; // -1 means "failed to write"
 
-      CFileBufT<TCHAR>::FilePtr f = CFileBufT<TCHAR>::openfile(szFileAndEncoding, true);
-      if ( f != NULL )
+    CFileBufT<TCHAR>::FilePtr f = CFileBufT<TCHAR>::openfile(szFileAndEncoding, true);
+    if ( f != NULL )
+    {
+      nBytesWritten = 0; // 0 bytes written yet
+
+      if ( nTextLen > 0 )
       {
-        nWritten = 0; // 0 bytes written yet
-        if ( nSciTextLen > 0 )
+        if ( enc == encUCS2LE )
         {
-          if ( enc == encUCS2LE )
-          {
-            // UCS-2 LE "BOM"
-            if ( CFileBufT<TCHAR>::writefile(f, (void *) "\xFF\xFE", 2) )
-              nWritten += 2;
-          }
-          else if ( (enc == encUTF8_BOM) || (enc == encAsIs && nSciCodePage == SC_CP_UTF8) )
-          {
-            // UTF-8 "BOM"
-            if ( CFileBufT<TCHAR>::writefile(f, (void *) "\xEF\xBB\xBF", 3) )
-              nWritten += 3;
-          }
+          // UCS-2 LE "BOM"
+          if ( CFileBufT<TCHAR>::writefile(f, (const void *) "\xFF\xFE", 2) )
+            nBytesWritten += 2;
         }
-        if ( CFileBufT<TCHAR>::writefile(f, pOutText, nOutSize) )
-          nWritten += nOutSize;
-        CFileBufT<TCHAR>::closefile(f, true);
+        else if ( (enc == encUTF8_BOM) || (enc == encAsIs && nSciCodePage == SC_CP_UTF8) )
+        {
+          // UTF-8 "BOM"
+          if ( CFileBufT<TCHAR>::writefile(f, (const void *) "\xEF\xBB\xBF", 3) )
+            nBytesWritten += 3;
+        }
       }
-        
-      delete [] pOutText;
-      return nWritten;
+
+      int nOutBytes = nOutTextLen;
+      if ( enc == encUCS2LE )
+        nOutBytes *= 2; // writing wide chars
+
+      if ( CFileBufT<TCHAR>::writefile(f, pOutText, nOutBytes) )
+        nBytesWritten += nOutBytes;
+
+      CFileBufT<TCHAR>::closefile(f, true);
     }
+        
+    delete [] pOutText;
+    return nBytesWritten;
   }
 
   return -1;
@@ -2324,6 +2432,133 @@ void CNppExec::textSetText(LPCTSTR cszText, bool bSelectionOnly)
   ::SendMessage( hSci, uMsg, 0, (LPARAM) (pBufData ? pBufData : "") );
 
   SciTextDeleteResultPtr(pBufData, cszText);
+}
+
+char* CNppExec::sciGetText(bool bSelectionOnly, int* pnTextLen, int* pnSciCodePage)
+{
+  HWND hSci = GetScintillaHandle();
+  *pnSciCodePage = static_cast<int>(::SendMessage(hSci, SCI_GETCODEPAGE, 0, 0));
+
+  const INT_PTR nSciTextLen = static_cast<INT_PTR>(::SendMessage(hSci, bSelectionOnly ? SCI_GETSELTEXT : SCI_GETTEXTLENGTH, 0, 0));
+  if ( nSciTextLen > INT_MAX - 2 )
+  {
+    // text length exceeds 2 GB, whereas the character
+    // conversion functions are limited by 'int'
+    *pnTextLen = -2;
+    return nullptr;
+  }
+
+  char* pSciText = new char[nSciTextLen + 2];
+  pSciText[0] = 0;
+  ::SendMessage(hSci, bSelectionOnly ? SCI_GETSELTEXT : SCI_GETTEXT, bSelectionOnly ? 0 : (nSciTextLen + 1), (LPARAM) pSciText);
+  // NOTE:
+  // Currently SCI_GETTEXT returns the text length _without_ the trailing \0.
+  // Currently SCI_GETSELTEXT returns the text length _with_ the trailing \0.
+  // Can we rely on this behavior in the future? I don't know.
+  // Let's better calculate the length explicitly.
+  int nTextLen = lstrlenA(pSciText);
+  pSciText[nTextLen] = 0;
+  *pnTextLen = nTextLen;
+
+  return pSciText;
+}
+
+tstr CNppExec::sciGetSelText()
+{
+  int nTextLen = 0;
+  int nSciCodePage = 0;
+  char* pSciText = sciGetText(true, &nTextLen, &nSciCodePage);
+  if (pSciText)
+  {
+  #ifdef UNICODE
+    CNppExec::eTextEnc enc = CNppExec::encUCS2LE;
+  #else
+    CNppExec::eTextEnc enc = CNppExec::encANSI;
+  #endif
+    int   nOutTextLen = 0;
+    char* pOutText = convertSciText(pSciText, nTextLen, nSciCodePage, enc, &nOutTextLen);
+    if (pOutText != pSciText)
+    {
+      delete [] pSciText;
+      pSciText = nullptr;
+    }
+    if (pOutText)
+    {
+      if (nOutTextLen == 0)
+      {
+        delete [] pOutText;
+        pOutText = nullptr;
+      }
+      else
+      {
+        return tstr::Wrap(reinterpret_cast<TCHAR*>(pOutText), nOutTextLen, nOutTextLen + 1);
+      }
+    }
+  }
+  return tstr();
+}
+
+char* CNppExec::convertSciText(char* pSciText, int nTextLen, int nSciCodePage, eTextEnc outEnc, int* pnOutLen)
+{
+  char* pOutText = nullptr;
+  *pnOutLen = 0;
+  
+  if ( nTextLen == 0 )
+  {
+    // no selected text / no text
+    if ( outEnc == encUCS2LE ) // Unicode
+    {
+      pOutText = new char[2];
+      pOutText[0] = 0;
+      pOutText[1] = 0;
+    }
+    else // MultiByte or ANSI
+    {
+      pOutText = pSciText; // empty string in this case
+      pOutText[0] = 0;
+    }
+  }
+  else if ( nSciCodePage == SC_CP_UTF8 )
+  {
+    switch ( outEnc )
+    {
+      case encANSI:  // ANSI
+        pOutText = SysUniConv::newUTF8ToMultiByte(pSciText, nTextLen, CP_ACP, pnOutLen);
+        break;
+      case encUCS2LE:  // Unicode
+        pOutText = reinterpret_cast<char *>(SysUniConv::newUTF8ToUnicode(pSciText, nTextLen, pnOutLen));
+        break; 
+      default:
+        pOutText = pSciText;
+        pOutText[nTextLen] = 0;
+        *pnOutLen = nTextLen;
+        break;
+    }
+  }
+  else
+  {
+    // multi-byte encoding
+    if ( nSciCodePage == 0 )
+      nSciCodePage = CP_ACP;
+
+    switch ( outEnc )
+    {
+      case encUTF8_BOM:   // UTF-8
+      case encUTF8_NoBOM:
+        pOutText = SysUniConv::newMultiByteToUTF8(pSciText, nTextLen, nSciCodePage, pnOutLen);
+        break;
+      case encUCS2LE:  // Unicode
+        pOutText = reinterpret_cast<char *>(SysUniConv::newMultiByteToUnicode(pSciText, nTextLen, nSciCodePage, pnOutLen));
+        break; 
+      default:
+        pOutText = pSciText;
+        pOutText[nTextLen] = 0;
+        *pnOutLen = nTextLen;
+        break;
+    }
+  }
+
+  return pOutText;
 }
 
 int CNppExec::findFileNameIndexInNppOpenFileNames(const tstr& fileName, bool bGetOpenFileNames, int nView )
@@ -3102,6 +3337,26 @@ bool CChildProcess::Create(HWND /*hParentWnd*/, LPCTSTR cszCommandLine)
     ::SetHandleInformation(m_hStdInWritePipe, HANDLE_FLAG_INHERIT, 0);
     ::SetHandleInformation(m_hStdOutReadPipe, HANDLE_FLAG_INHERIT, 0);
 
+    // Job object
+    HANDLE hJob = NULL;
+    if ( m_pNppExec->GetOptions().GetBool(OPTB_CONSOLE_KILLPROCTREE) )
+    {
+        hJob = ::CreateJobObject(NULL, NULL);
+        if ( hJob != NULL )
+        {
+            JOBOBJECT_EXTENDED_LIMIT_INFORMATION jeli;
+
+            ::ZeroMemory(&jeli, sizeof(jeli));
+            jeli.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+            // Causes all processes associated with the job to terminate when the last handle to the job is closed.
+            if ( !::SetInformationJobObject(hJob, JobObjectExtendedLimitInformation, &jeli, sizeof(jeli)) )
+            {
+                ::CloseHandle(hJob);
+                hJob = NULL;
+            }
+        }
+    }
+
     /*
     DWORD dwMode = PIPE_READMODE_BYTE | PIPE_NOWAIT;
     SetNamedPipeHandleState(m_hStdOutWritePipe, &dwMode, NULL, NULL);
@@ -3131,26 +3386,47 @@ bool CChildProcess::Create(HWND /*hParentWnd*/, LPCTSTR cszCommandLine)
     tstr sCmdLine = cszCommandLine;
     applyCommandLinePolicy(sCmdLine, mode);
 
+    DWORD dwCreationFlags = 0;
+    if ( hJob != NULL )
+    {
+        BOOL bIsProcessInJob = FALSE;
+        if ( ::IsProcessInJob(GetCurrentProcess(), NULL, &bIsProcessInJob) )
+        {
+            if ( bIsProcessInJob )
+                dwCreationFlags |= CREATE_BREAKAWAY_FROM_JOB;
+        }
+    }
+
     if ( ::CreateProcess(
             NULL,
             sCmdLine.c_str(),
             NULL,                        // security
             NULL,                        // security
             TRUE,                        // inherits handles
-            CREATE_NEW_PROCESS_GROUP,    // creation flags
+            dwCreationFlags,             // creation flags
             NULL,                        // environment
             NULL,                        // current directory
             &si,                         // startup info
             &m_ProcessInfo               // process info
        ) )
     {
+        if ( hJob != NULL )
+        {
+            if ( !::AssignProcessToJobObject(hJob, m_ProcessInfo.hProcess) )
+            {
+                ::CloseHandle(hJob);
+                hJob = NULL;
+            }
+        }
+
         ::CloseHandle(m_ProcessInfo.hThread); m_ProcessInfo.hThread = NULL;
         //::CloseHandle(hStdOutWritePipe); hStdOutWritePipe = NULL;
         //::CloseHandle(hStdInReadPipe); hStdInReadPipe = NULL;
 
         bool isConsoleProcessRunning = true;
     
-        m_pNppExec->GetConsole().PrintMessage( tstr().Format(80, _T("Process started (PID=%u) >>>"), m_ProcessInfo.dwProcessId) );
+        const UINT nMsgFlags = CNppExecConsole::pfLogThisMsg | CNppExecConsole::pfNewLine | CNppExecConsole::pfIsInternalMsg;
+        m_pNppExec->GetConsole().PrintMessage( tstr().Format(80, _T("Process started (PID=%u) >>>"), m_ProcessInfo.dwProcessId), nMsgFlags );
 
         {
             TCHAR szProcessId[50];
@@ -3259,11 +3535,16 @@ bool CChildProcess::Create(HWND /*hParentWnd*/, LPCTSTR cszCommandLine)
                                 break;
                         }
                         Msg += _T('.');
-                        m_pNppExec->GetConsole().PrintMessage( Msg.c_str() );
+                        const UINT nPrintMsgFlags = CNppExecConsole::pfLogThisMsg | CNppExecConsole::pfNewLine | CNppExecConsole::pfIsInternalMsg;
+                        m_pNppExec->GetConsole().PrintMessage( Msg.c_str(), nPrintMsgFlags );
                     }
                     else
                     {
-                        if (nPrevState != 1 /* new line */ )  m_pNppExec->GetConsole().PrintMessage( _T(""), false );
+                        if (nPrevState != 1 /* new line */ )
+                        {
+                            const UINT nPrintMsgFlags = CNppExecConsole::pfLogThisMsg | CNppExecConsole::pfNewLine;
+                            m_pNppExec->GetConsole().PrintMessage( _T(""), nPrintMsgFlags );
+                        }
                     }
                 }
                 else
@@ -3276,11 +3557,16 @@ bool CChildProcess::Create(HWND /*hParentWnd*/, LPCTSTR cszCommandLine)
 
                         if ( !m_pNppExec->GetOptions().GetBool(OPTB_CONSOLE_NOINTMSGS) )
                         {
-                            m_pNppExec->GetConsole().PrintMessage( tstr().Format(80, _T("<<< Process has been terminated (PID=%d)."), m_ProcessInfo.dwProcessId) );
+                            const UINT nPrintMsgFlags = CNppExecConsole::pfLogThisMsg | CNppExecConsole::pfNewLine | CNppExecConsole::pfIsInternalMsg;
+                            m_pNppExec->GetConsole().PrintMessage( tstr().Format(80, _T("<<< Process has been terminated (PID=%d)."), m_ProcessInfo.dwProcessId), nPrintMsgFlags );
                         }
                         else
                         {
-                            if (nPrevState != 1 /* new line */ )  m_pNppExec->GetConsole().PrintMessage( _T(""), false );
+                            if (nPrevState != 1 /* new line */ )
+                            {
+                                const UINT nPrintMsgFlags = CNppExecConsole::pfLogThisMsg | CNppExecConsole::pfNewLine;
+                                m_pNppExec->GetConsole().PrintMessage( _T(""), nPrintMsgFlags );
+                            }
                         }
                     }
                     else
@@ -3299,16 +3585,26 @@ bool CChildProcess::Create(HWND /*hParentWnd*/, LPCTSTR cszCommandLine)
         // Process cleanup
         ::CloseHandle(m_ProcessInfo.hProcess); m_ProcessInfo.hProcess = NULL;
         closePipes();
+        if ( hJob != NULL )
+        {
+            ::CloseHandle(hJob);
+            hJob = NULL;
+        }
 
         if ( m_pScriptEngine->ContinueExecution() && !isBreaking() )
         {
             if ( !m_pNppExec->GetOptions().GetBool(OPTB_CONSOLE_NOINTMSGS) )
             {
-                m_pNppExec->GetConsole().PrintMessage( tstr().Format(100, _T("<<< Process finished (PID=%u). (Exit code %d)"), m_ProcessInfo.dwProcessId, m_nExitCode) ); 
+                const UINT nPrintMsgFlags = CNppExecConsole::pfLogThisMsg | CNppExecConsole::pfNewLine | CNppExecConsole::pfIsInternalMsg;
+                m_pNppExec->GetConsole().PrintMessage( tstr().Format(100, _T("<<< Process finished (PID=%u). (Exit code %d)"), m_ProcessInfo.dwProcessId, m_nExitCode), nPrintMsgFlags ); 
             }
             else
             {
-                if (nPrevState != 1 /* new line */ )  m_pNppExec->GetConsole().PrintMessage( _T(""), false );
+                if (nPrevState != 1 /* new line */ )
+                {
+                    const UINT nPrintMsgFlags = CNppExecConsole::pfLogThisMsg | CNppExecConsole::pfNewLine;
+                    m_pNppExec->GetConsole().PrintMessage( _T(""), nPrintMsgFlags );
+                }
             }
         }
 
@@ -3319,6 +3615,11 @@ bool CChildProcess::Create(HWND /*hParentWnd*/, LPCTSTR cszCommandLine)
         DWORD dwErrorCode = ::GetLastError();
 
         closePipes();
+        if ( hJob != NULL )
+        {
+            ::CloseHandle(hJob);
+            hJob = NULL;
+        }
 
         if ( m_pScriptEngine )
         {
@@ -3623,7 +3924,7 @@ DWORD CChildProcess::readPipesAndOutput(CStrT<char>& bufLine,
                                     copy_len--;
                             }
 
-                            outLine.Copy(bufLine.c_str(), copy_len);
+                            outLine.Assign(bufLine.c_str(), copy_len);
 
                             if ( nIsNewLine == 7 ) // '\b'
                             {
@@ -3754,7 +4055,10 @@ DWORD CChildProcess::readPipesAndOutput(CStrT<char>& bufLine,
                                         }
                                     }
 
-                                    m_pNppExec->GetConsole().PrintOutput( printLine.c_str(), (nIsNewLine == 1) ? true : false );
+                                    UINT nPrintOutFlags = CNppExecConsole::pfLogThisMsg;
+                                    if ( nIsNewLine == 1 )
+                                        nPrintOutFlags |= CNppExecConsole::pfNewLine;
+                                    m_pNppExec->GetConsole().PrintOutput( printLine.c_str(), nPrintOutFlags );
                                 }
 
                                 // if the current line is not over, then the current filter 
@@ -4111,7 +4415,7 @@ void CNppExec::printScriptLog(const TCHAR* str, int)
     if ( CNppExec::_bIsNppShutdown ) // if it is called _after_ NPPN_SHUTDOWN, ~CNppExec() may have been called already
         return;
 
-    Runtime::GetNppExec().GetConsole().PrintError( str, false );
+    Runtime::GetNppExec().GetConsole().PrintError( str, 0 );
 }
 
 void CNppExec::printScriptString(const TCHAR* str, int)
@@ -4120,146 +4424,8 @@ void CNppExec::printScriptString(const TCHAR* str, int)
     if ( CNppExec::_bIsNppShutdown ) // if it is called _after_ NPPN_SHUTDOWN, ~CNppExec() may have been called already
         return;
 
-    Runtime::GetNppExec().GetConsole().PrintMessage( str, false, false );
-}
-
-bool CNppExec::SendChildProcessExitCommand()
-{
-    bool bSend = false;
-
-    if ( !GetCommandExecutor().GetTriedExitCmd() )
-    {
-        CCriticalSectionLockGuard lock(GetMacroVars().GetCsUserMacroVars());
-        const int nMacroVarsLists = 2;
-        const CNppExecMacroVars::tMacroVars* pMacroVarsLists[nMacroVarsLists] = {
-            &GetMacroVars().GetUserLocalMacroVars(nullptr), // try local first
-            &GetMacroVars().GetUserMacroVars()
-        };
-
-        const int nExitMacroVars = 2;
-        const TCHAR* cszExitMacroVars[nExitMacroVars] = {
-            MACRO_EXIT_CMD,        // try non-silent first
-            MACRO_EXIT_CMD_SILENT
-        };
-
-        tstr exit_cmd;
-        tstr macro_name;
-
-        for ( int nList = 0; (nList < nMacroVarsLists) && (!bSend); nList++ )
-        {
-            const CNppExecMacroVars::tMacroVars* pVarsList = pMacroVarsLists[nList];
-            for ( int nVar = 0; (nVar < nExitMacroVars) && (!bSend); nVar++ )
-            {
-                macro_name = cszExitMacroVars[nVar];
-                CNppExecMacroVars::tMacroVars::const_iterator itr = pVarsList->find(macro_name);
-                if ( itr != pVarsList->end() )
-                {
-                    exit_cmd = itr->second;
-                    bSend = true;
-                }
-            }
-        }
-
-        if ( bSend )
-        {
-            GetCommandExecutor().SetTriedExitCmd(true);
-
-            Runtime::GetLogger().AddEx( _T("; child process automatic command: %s = %s"), macro_name.c_str(), exit_cmd.c_str() );
-
-            if ( macro_name == MACRO_EXIT_CMD )
-            {
-                GetConsole().PrintStr( exit_cmd.c_str(), true );
-            }
-            GetCommandExecutor().ExecuteChildProcessCommand( exit_cmd );
-        }
-    }
-
-    return bSend;
-}
-
-bool CNppExec::ShowChildProcessExitDialog()
-{
-    const CListItemT<tstr>* p = InputBoxDlg.m_InputHistory[CInputBoxDlg::IBT_EXITPROCESS].GetFirst();
-
-    // init the InputBox dialog values
-    InputBoxDlg.m_InputMessage = _T("Console process is still running. Send - send the exit command; Cancel [Esc] - continue. Kill is not recommended.");
-    if ( p && (p->GetItem().length() > 0) )
-    {
-        InputBoxDlg.m_InputMessage += _T(" : ");
-        InputBoxDlg.m_InputMessage += p->GetItem();
-    }
-    InputBoxDlg.m_InputVarName = _T("exit command: ");
-    InputBoxDlg.setInputBoxType(CInputBoxDlg::IBT_EXITPROCESS);
-        
-    // show the InputBox dialog
-    INT_PTR ret = PluginDialogBox(IDD_INPUTBOX, InputBoxDlgProc);
-    switch ( ret )
-    {
-        case CInputBoxDlg::RET_OK:
-            // OK - send the exit command
-            {
-                tstr exit_cmd = InputBoxDlg.m_OutputValue;
-
-                Runtime::GetLogger().AddEx( _T("; child process manual command: %s"), exit_cmd.c_str() );
-
-                std::shared_ptr<CScriptEngine> pScriptEngine = GetCommandExecutor().GetRunningScriptEngine();
-                if ( pScriptEngine && !pScriptEngine->IsCollateral() )
-                {
-                    GetConsole().PrintStr( exit_cmd.c_str(), true );
-                }
-                GetCommandExecutor().ExecuteChildProcessCommand( exit_cmd );
-            }
-            break;
-        case CInputBoxDlg::RET_KILL:
-            // Kill
-            GetCommandExecutor().ChildProcessMustBreak(CProcessKiller::killCtrlBreak);
-            break;
-    }
-
-    return (ret >= CInputBoxDlg::RET_OK);
-}
-
-bool CNppExec::TryExitRunningChildProcess(unsigned int nFlags)
-{
-    // send the exit command first...
-    if ( SendChildProcessExitCommand() )
-    {
-        unsigned int uMaxTimeout = GetOptions().GetUint(OPTU_CHILDP_EXITTIMEOUT_MS);
-        if ( GetCommandExecutor().WaitUntilAllScriptEnginesDone(uMaxTimeout) )
-            return true;
-    }
-
-    // the exit command did not succeed or it was not sent...
-    if ( (nFlags & sfDoNotShowExitDialog) == 0 )
-    {
-        if ( ShowChildProcessExitDialog() )
-        {
-            unsigned int uMaxTimeout = GetOptions().GetUint(OPTU_CHILDP_EXITTIMEOUT_MS);
-            if ( GetCommandExecutor().WaitUntilAllScriptEnginesDone(uMaxTimeout) )
-                return true;
-        }
-    }
-
-    return false;
-}
-
-bool CNppExec::CanStartScriptOrCommand(unsigned int nFlags)
-{
-    if ( GetCommandExecutor().IsChildProcessRunning() )
-    {
-        return TryExitRunningChildProcess();
-    }
-    
-    if ( GetCommandExecutor().IsScriptRunningOrQueued() )
-    {
-        if ( (nFlags & sfDoNotShowWarningOnScript) == 0 )
-        {
-            ShowWarning( _T("Another script is still running") );
-        }
-        return false;
-    }
-    
-    return true;
+    const UINT nMsgFlags = CNppExecConsole::pfNewLine;
+    Runtime::GetNppExec().GetConsole().PrintMessage( str, nMsgFlags );
 }
 
 void CNppExec::Uninit()
@@ -4285,10 +4451,17 @@ void CNppExec::Uninit()
     GetCommandExecutor().WaitUntilAllScriptEnginesDone(INFINITE);
     GetCommandExecutor().Stop();
 
-    if ( m_TB_Icon.hToolbarBmp )
-        ::DeleteObject(m_TB_Icon.hToolbarBmp);
-    if ( m_TB_Icon.hToolbarIcon )
-        ::DestroyIcon(m_TB_Icon.hToolbarIcon);
+    if ( m_TB_Icons.hToolbarBmp )
+        ::DeleteObject(m_TB_Icons.hToolbarBmp);
+    if ( m_TB_Icons.hToolbarIcon )
+        ::DestroyIcon(m_TB_Icons.hToolbarIcon);
+
+    if ( m_TB_IconsWithDarkMode.hToolbarBmp )
+        ::DeleteObject(m_TB_IconsWithDarkMode.hToolbarBmp);
+    if ( m_TB_IconsWithDarkMode.hToolbarIcon )
+        ::DestroyIcon(m_TB_IconsWithDarkMode.hToolbarIcon);
+    if ( m_TB_IconsWithDarkMode.hToolbarIconDarkMode )
+        ::DestroyIcon(m_TB_IconsWithDarkMode.hToolbarIconDarkMode);
 
     if ( npp_bufFileNames.GetCount() > 0 )
     {
@@ -4353,48 +4526,93 @@ void CNppExec::InitPluginName(HMODULE hDllModule)
   }
 
   {
-    tstr name = PLUGIN_NAME;
-    if ( name.length() > 0 )
+    tstr plug_name = PLUGIN_NAME;
+    if ( plug_name.length() > 0 )
     {
       // needed in MustDie9x because GetModuleFileName returns 
       // capital letters there (stupid M$...)
-      NppExecHelpers::StrUpper(name);
-      i = name.Find( _T("NPPEXEC") );
+      NppExecHelpers::StrUpper(plug_name);
+      i = plug_name.Find( _T("NPPEXEC") );
       if ( i >= 0 )
       {
-        name.Replace( i, 7, _T("NppExec") );
+        plug_name.Replace( i, 7, _T("NppExec") );
         if ( i > 1 )
         {
-          ::CharLowerBuff( (name.c_str() + 1), i - 1 );
+          ::CharLowerBuff( (plug_name.c_str() + 1), i - 1 );
         }
-        if ( i + 8 < name.length() )
+        if ( i + 8 < plug_name.length() )
         {
-          ::CharLowerBuff( (name.c_str() + i + 8), name.length() - i - 8 );
+          ::CharLowerBuff( (plug_name.c_str() + i + 8), plug_name.length() - i - 8 );
         }
-        lstrcpy( PLUGIN_NAME, name.c_str() );
-      
+        lstrcpy( PLUGIN_NAME, plug_name.c_str() );
+
+        tstr S;
+
+        auto add_prefix_to_item_name = [&S](const tstr& prefix, TCHAR* item_name)
+        {
+          S = prefix;
+          S += _T(" ");
+          S += item_name;
+          lstrcpy( item_name, S.c_str() );
+        };
+
+        auto insert_into_item_name = [&S](const tstr& insert, TCHAR* item_name, int word_pos = 1)
+        {
+          int k = 0;
+          for (; word_pos > 0; --word_pos)
+          {
+            if (k != 0)
+              ++k; // after a word separator
+            int k2 = c_base::_tstr_unsafe_findch(item_name + k, _T(' ')); // next word separator
+            if (k2 != -1)
+              k += k2;
+            else
+              return;
+          }
+          S.Assign(item_name, k);
+          S.Append(_T(' '));
+          S.Append(insert);
+          S.Append(item_name + k);
+          lstrcpy( item_name, S.c_str() );
+        };
+
+        // Execute dialog title
+        insert_into_item_name(plug_name, EXECUTE_DLG_TITLE);
+
         // Console dialog title:
-        tstr S = name;
-        S.Replace( _T("NppExec"), _T("Console") );
-        S.Insert( 0, _T(' ') );
-        S.Append( _T(' ') );
-        lstrcpy( CONSOLE_DLG_TITLE, S.c_str() );
+        add_prefix_to_item_name(plug_name, CONSOLE_DLG_TITLE);
+
+        // Execute Script menu item
+        insert_into_item_name(plug_name, DO_EXEC_MENU_ITEM);
+
+        // Execute Previous Script menu item
+        insert_into_item_name(plug_name, DIRECT_EXEC_MENU_ITEM, 2);
 
         // Show Console menu item:
-        S = name;
-        S.Replace( _T("NppExec"), _T("Console") );
-        S.Insert( 0, _T("Show ") );
-        lstrcpy( SHOW_CONSOLE_MENU_ITEM, S.c_str() );
+        insert_into_item_name(plug_name, SHOW_CONSOLE_MENU_ITEM);
 
         // Toggle Console menu item:
-        S.Replace( _T("Show "), _T("Toggle ") );
-        lstrcpy( TOGGLE_CONSOLE_MENU_ITEM, S.c_str() );
+        insert_into_item_name(plug_name, TOGGLE_CONSOLE_MENU_ITEM);
 
         // Command History file name:
-        S = name;
+        S = plug_name;
         S.Replace( _T("NppExec"), _T("npec_cmdhistory") );
         S.Append( _T(".txt") );
         lstrcpy( CMDHISTORY_FILENAME, S.c_str() );
+
+        // Temp Script file name (initial value before ReadOptions()):
+        S = plug_name;
+        S.Replace( _T("NppExec"), _T("npes_temp") );
+        S.Append( _T(".txt") );
+        lstrcpy( SCRIPTFILE_TEMP, S.c_str() );
+        Runtime::GetNppExec().GetOptions().SetStr( OPTS_PLUGIN_TEMPSCRIPTFILE, S.c_str() );
+
+        // Last Script file name (initial value before ReadOptions()):
+        S = plug_name;
+        S.Replace( _T("NppExec"), _T("npes_last") );
+        S.Append( _T(".txt") );
+        lstrcpy( SCRIPTFILE_LAST, S.c_str() );
+        Runtime::GetNppExec().GetOptions().SetStr( OPTS_PLUGIN_LASTSCRIPTFILE, S.c_str() );
       }
     }
   }
@@ -4461,6 +4679,12 @@ void CNppExec::Init()
   ReadOptions();
   GetCommandExecutor().Start();
   GetPluginInterfaceImpl().Enable(true); // enabling it after the CommandExecutor is up
+
+  if ( GetOptions().GetBool(OPTB_WATCHSCRIPTFILE) )
+  {
+    m_FileWatcher.StartWatching();
+    GetLogger().Add_WithoutOutput( _T("; CFileModificationWatcher - started") );
+  }
 }
 
 void CNppExec::OnCmdHistory()
@@ -4477,6 +4701,8 @@ void CNppExec::OnCmdHistory()
 
 void CNppExec::OnDoExecDlg()
 {
+    Runtime::GetLogger().Add( _T("; OnDoExecDlg") );
+
     initConsoleDialog();
     CNppExecCommandExecutor::ScriptableCommand * pCommand = new CNppExecCommandExecutor::OnDoExecDlgCommand(tstr());
     GetCommandExecutor().ExecuteCommand(pCommand);
@@ -4484,23 +4710,160 @@ void CNppExec::OnDoExecDlg()
 
 void CNppExec::OnDirectExec(const tstr& id, bool bCanSaveAll, unsigned int nRunFlags /* = 0 */ )
 {
+    Runtime::GetLogger().Add( _T("; OnDirectExec") );
+
     initConsoleDialog();
-    CNppExecCommandExecutor::ScriptableCommand * pCommand = new CNppExecCommandExecutor::OnDirectExecCommand(id, bCanSaveAll, nRunFlags);
-    GetCommandExecutor().ExecuteCommand(pCommand);
+    CListT<tstr> CmdList = GetCmdList();
+    if ( CScriptEngine::isScriptCollateral(this, CmdList) )
+    {
+        GetCommandExecutor().ExecuteCollateralScript(CmdList, tstr(), IScriptEngine::rfCollateralScript);
+    }
+    else
+    {
+        CNppExecCommandExecutor::ScriptableCommand * pCommand = new CNppExecCommandExecutor::OnDirectExecCommand(id, bCanSaveAll, nRunFlags);
+        GetCommandExecutor().ExecuteCommand(pCommand);
+    }
+}
+
+void CNppExec::DoExecText(const tstr& sText, unsigned int nExecTextMode)
+{
+    CNppExecCommandExecutor& CommandExecutor = GetCommandExecutor();
+    const bool isChildProcess = CommandExecutor.IsChildProcessRunning();
+
+    unsigned int nRunFlags = 0;
+    if ( nExecTextMode & etfShareLocalVars )
+    {
+        nRunFlags |= (IScriptEngine::rfShareLocalVars | IScriptEngine::rfShareConsoleLocalVars);
+    }
+    if ( nExecTextMode & etfShareConsoleState )
+    {
+        nRunFlags |= IScriptEngine::rfShareConsoleState;
+    }
+
+    tstr sProcessedText;
+    const TCHAR* pszText = sText.c_str();
+    if ( ((nExecTextMode & etfMacroVarsWithChildProc) != 0 && isChildProcess) ||
+         ((nExecTextMode & etfMacroVarsNoChildProc) != 0 && !isChildProcess) )
+    {
+        auto scriptEngine = CommandExecutor.GetRunningScriptEngine();
+        CScriptEngine* pScriptEngine = scriptEngine ? scriptEngine.get() : nullptr;
+        sProcessedText = sText;
+        GetMacroVars().CheckAllMacroVars(pScriptEngine, sProcessedText, true);
+        pszText = sProcessedText.c_str();
+    }
+
+    const unsigned int nCmdFlags = isChildProcess ? (CScriptEngine::acfKeepLineEndings | CScriptEngine::acfAddEmptyLines) : 0;
+    tCmdList CmdList = CScriptEngine::getCmdListFromText(pszText, nCmdFlags);
+
+    bool isCollateral = false;
+    if ( ((nExecTextMode & etfCollateralWithChildProc) != 0 && isChildProcess) ||
+         ((nExecTextMode & etfCollateralNoChildProc) != 0 && !isChildProcess) )
+    {
+        isCollateral = CScriptEngine::isScriptCollateral(this, CmdList);
+    }
+
+    if ( isCollateral )
+    {
+        if ( checkCmdListAndPrepareConsole(CmdList, false) )
+        {
+            if ( nCmdFlags & CScriptEngine::acfKeepLineEndings )
+            {
+                CScriptEngine::removeLineEndings(CmdList);
+            }
+            if ( nExecTextMode & etfLastScript )
+            {
+                SetCmdList(CmdList);
+            }
+            CommandExecutor.ExecuteCollateralScript(CmdList, tstr(), nRunFlags | IScriptEngine::rfCollateralScript);
+        }
+    }
+    else if ( isChildProcess )
+    {
+        showConsoleDialog(showIfHidden, 0);
+        if ( nExecTextMode & etfNppExecPrefix )
+        {
+            tCmdList CollateralCmdList = CScriptEngine::getCollateralCmdListForChildProcess(this, CmdList);
+            if ( CollateralCmdList.IsEmpty() )
+            {
+                CommandExecutor.WriteChildProcessInput( pszText );
+                CommandExecutor.WriteChildProcessInput( GetOptions().GetStr(OPTS_KEY_ENTER) );
+            }
+            else
+            {
+                CommandExecutor.ExecuteCollateralScript(CollateralCmdList, tstr(), nRunFlags | IScriptEngine::rfCollateralScript | IScriptEngine::rfShareLocalVars);
+            }
+        }
+        else
+        {
+            CommandExecutor.WriteChildProcessInput( pszText );
+            CommandExecutor.WriteChildProcessInput( GetOptions().GetStr(OPTS_KEY_ENTER) );
+        }
+    }
+    else
+    {
+        if ( checkCmdListAndPrepareConsole(CmdList, false) )
+        {
+            if ( nExecTextMode & etfLastScript )
+            {
+                SetCmdList(CmdList);
+            }
+            CNppExecCommandExecutor::ScriptableCommand * pCommand = new CNppExecCommandExecutor::DoRunScriptCommand(tstr(), CmdList, nRunFlags);
+            CommandExecutor.ExecuteCommand(pCommand);
+        }
+    }
+}
+
+void CNppExec::OnExecSelText()
+{
+    if ( !CNppExec::_bIsNppReady )
+        return;
+
+    Runtime::GetLogger().Add( _T("; OnExecSelText") );
+
+    unsigned int nExecTextMode = GetOptions().GetUint(OPTI_CONSOLE_EXECSELTEXTMODE);
+    DoExecText( sciGetSelText(), nExecTextMode );
+}
+
+void CNppExec::OnExecClipText()
+{
+    if ( !CNppExec::_bIsNppReady )
+        return;
+
+    Runtime::GetLogger().Add( _T("; OnExecClipText") );
+
+    unsigned int nExecTextMode = GetOptions().GetUint(OPTI_CONSOLE_EXECCLIPTEXTMODE);
+    DoExecText( NppExecHelpers::GetClipboardText(), nExecTextMode );
 }
 
 void CNppExec::DoExecScript(const tstr& id, LPCTSTR szScriptName, bool bCanSaveAll, LPCTSTR szScriptArguments /* = NULL */ , unsigned int nRunFlags /* = 0 */ )
 {
     initConsoleDialog();
-    CNppExecCommandExecutor::ScriptableCommand * pCommand = new CNppExecCommandExecutor::DoExecScriptCommand(id, szScriptName, szScriptArguments, bCanSaveAll, nRunFlags);
-    GetCommandExecutor().ExecuteCommand(pCommand);
+    CNppScript nppScript;
+    m_ScriptsList.GetScript(szScriptName, nppScript);
+    const CListT<tstr>& CmdList = nppScript.GetCmdList();
+    if ( CScriptEngine::isScriptCollateral(this, CmdList) )
+    {
+        GetCommandExecutor().ExecuteCollateralScript(CmdList, tstr(), IScriptEngine::rfCollateralScript);
+    }
+    else
+    {
+        CNppExecCommandExecutor::ScriptableCommand * pCommand = new CNppExecCommandExecutor::DoExecScriptCommand(id, szScriptName, szScriptArguments, bCanSaveAll, nRunFlags);
+        GetCommandExecutor().ExecuteCommand(pCommand);
+    }
 }
 
 void CNppExec::DoRunScript(const CListT<tstr>& CmdList, unsigned int nRunFlags /* = 0 */ )
 {
     initConsoleDialog();
-    CNppExecCommandExecutor::ScriptableCommand * pCommand = new CNppExecCommandExecutor::DoRunScriptCommand(tstr(), CmdList, nRunFlags);
-    GetCommandExecutor().ExecuteCommand(pCommand);
+    if ( CScriptEngine::isScriptCollateral(this, CmdList) )
+    {
+        GetCommandExecutor().ExecuteCollateralScript(CmdList, tstr(), IScriptEngine::rfCollateralScript);
+    }
+    else
+    {
+        CNppExecCommandExecutor::ScriptableCommand * pCommand = new CNppExecCommandExecutor::DoRunScriptCommand(tstr(), CmdList, nRunFlags);
+        GetCommandExecutor().ExecuteCommand(pCommand);
+    }
 }
 
 void CNppExec::RunTheStartScript()
@@ -4526,6 +4889,7 @@ void CNppExec::RunTheExitScript()
             m_ExitScriptIsDone.Create(NULL, TRUE, FALSE, NULL);
 
         // instead of calling DoExecScript(), execute it right here, synchronously
+        // the "!collateral" directive (if it is present) is ignored
         initConsoleDialog();
         CNppExecCommandExecutor::DoExecScriptCommand Cmd(tstr(), pszExitScriptName, NULL, false, CScriptEngine::rfExitScript);
 
@@ -4552,6 +4916,7 @@ void CNppExec::OnNoInternalMsgs()
   }
 }
 
+#ifdef _DISABLE_CMD_ALIASES
 void CNppExec::OnNoCmdAliases()
 {
     HMENU hMenu = GetNppMainMenu();
@@ -4563,6 +4928,7 @@ void CNppExec::OnNoCmdAliases()
             MF_BYCOMMAND | (bNoCmdAliases ? MF_CHECKED : MF_UNCHECKED));
     }
 }
+#endif
 
 #ifdef _SCROLL_TO_LATEST
 void CNppExec::OnScrollToLatest()
@@ -4611,6 +4977,22 @@ void CNppExec::UpdateConsoleEncoding()
             lstrcat( szItemText, CConsoleEncodingDlg::getInputEncodingName(enc_opt) );
             lstrcat( szItemText, _T("}") );
             ::SetMenuItemInfo(hMenu, g_funcItem[N_CONSOLE_ENC]._cmdID, FALSE, &mii);
+        }
+    }
+}
+
+void CNppExec::updateConsoleEncodingFlags()
+{
+    unsigned int enc_opt = GetOptions().GetUint(OPTU_CONSOLE_ENCODING);
+    if ( enc_opt > 0xFF )
+    {
+        // "input as output" flag is set
+        unsigned int encIn  = CConsoleEncodingDlg::getInputEncoding(enc_opt);
+        unsigned int encOut = CConsoleEncodingDlg::getOutputEncoding(enc_opt);
+        if ( encIn != encOut )
+        {
+            // remove the "input as output" flag
+            GetOptions().SetUint(OPTU_CONSOLE_ENCODING, enc_opt & 0xFF);
         }
     }
 }
@@ -4688,7 +5070,7 @@ void CNppExec::OnSelectConsoleFont()
   HFONT      hEdFont = _consoleFont;
   
   ZeroMemory(&lf, sizeof(LOGFONT));
-  GetObject(hEdFont ? hEdFont : GetStockObject(SYSTEM_FONT), sizeof(LOGFONT), &lf);
+  GetObject(hEdFont ? hEdFont : GetStockObject(ANSI_FIXED_FONT), sizeof(LOGFONT), &lf);
 
   ZeroMemory(&cf, sizeof(CHOOSEFONT));
   cf.lStructSize = sizeof(CHOOSEFONT);
@@ -4709,6 +5091,38 @@ void CNppExec::OnSelectConsoleFont()
 
   ::SetFocus(hWndFocus);
 
+}
+
+void CNppExec::OnSelectExecDlgFont()
+{
+  LOGFONT    lf;
+  CHOOSEFONT cf;
+  HFONT      hDlgFont = _execdlgFont;
+
+  ZeroMemory(&lf, sizeof(LOGFONT));
+  GetObject(hDlgFont ? hDlgFont : GetStockObject(ANSI_FIXED_FONT), sizeof(LOGFONT), &lf);
+
+  ZeroMemory(&cf, sizeof(CHOOSEFONT));
+  cf.lStructSize = sizeof(CHOOSEFONT);
+  cf.hwndOwner = m_nppData._nppHandle;
+  cf.lpLogFont = &lf;
+  cf.Flags = CF_FORCEFONTEXIST | CF_INITTOLOGFONTSTRUCT | CF_SCREENFONTS;
+  
+  HWND hWndFocus = ::GetFocus();
+  
+  if (ChooseFont(&cf))
+  {
+    /*
+    if (lf.lfHeight > 0) 
+      lf.lfHeight = -lf.lfHeight;
+    */
+    if (_execdlgFont)
+      ::DeleteObject(_execdlgFont);
+    GetOptions().SetData(OPTD_EXECDLG_FONT, &lf, sizeof(LOGFONT));
+    _execdlgFont = CreateFontIndirect(&lf);
+  }
+
+  ::SetFocus(hWndFocus);
 }
 
 void CNppExec::OnShowConsoleDlg()
@@ -4747,6 +5161,8 @@ void CNppExec::OnToggleConsoleDlg()
 
 void CNppExec::OnGoToNextError()
 {
+    Runtime::GetLogger().Add( _T("; OnGoToNextError") );
+
     if ( GetConsole().GetDialogWnd() )
         showConsoleDialog(showIfHidden, 0);
 
@@ -4755,6 +5171,8 @@ void CNppExec::OnGoToNextError()
 
 void CNppExec::OnGoToPrevError()
 {
+    Runtime::GetLogger().Add( _T("; OnGoToPrevError") );
+
     if ( GetConsole().GetDialogWnd() )
         showConsoleDialog(showIfHidden, 0);
 
@@ -4766,8 +5184,16 @@ void CNppExec::OnHelpManual()
     tstr sHelpFile = GetOptions().GetStr(OPTS_PLUGIN_HELPFILE);
     if ( !sHelpFile.IsEmpty() )  // not empty
     {
-        GetMacroVars().CheckPluginMacroVars(sHelpFile);
-        GetMacroVars().CheckNppMacroVars(sHelpFile);
+        CNppExecMacroVars& MacroVars = GetMacroVars();
+        int pos = 0;
+        while ( (pos = sHelpFile.Find(_T("$("), pos)) >= 0 )
+        {
+            if ( !MacroVars.CheckPluginMacroVars(sHelpFile, pos) &&
+                 !MacroVars.CheckNppMacroVars(sHelpFile, pos) )
+            {
+                break;
+            }
+        }
 
         sHelpFile.Replace( _T('/'), _T('\\') );
         if ( NppExecHelpers::IsFullPath(sHelpFile) )
@@ -4869,7 +5295,7 @@ void CNppExec::OnUserMenuItem(int nItemNumber)
                     {
                         len += lstrlen(cszUserMenuItemSep);
                         psz += len; // before cszUserMenuItemSep
-                        psz = c_base::_tstr_unsafe_skip_tabspaces(psz);
+                        while ( NppExecHelpers::IsAnySpaceChar(*psz) )  ++psz;
                         if ( *psz )
                         {
                             DoExecScript(tstr(), psz, true);
@@ -4913,14 +5339,21 @@ void CNppExec::ReadOptions()
     ::time(&rawTime);
     timeInfo = ::localtime(&rawTime);
 
-    GetMacroVars().CheckPluginMacroVars(sLogsDir);
-    GetMacroVars().CheckNppMacroVars(sLogsDir);
+    CNppExecMacroVars& MacroVars = GetMacroVars();
+    int pos = 0;
+    while ( (pos = sLogsDir.Find(_T("$("), pos)) >= 0 )
+    {
+        if ( !MacroVars.CheckPluginMacroVars(sLogsDir, pos) &&
+             !MacroVars.CheckNppMacroVars(sLogsDir, pos) )
+        {
+            break;
+        }
+    }
 
     sLogsDir.Replace( _T('/'), _T('\\') );
     if ( !NppExecHelpers::IsFullPath(sLogsDir) )
     {
-      tstr sBaseDir = _T("$(SYS.TEMP)");
-      GetMacroVars().CheckPluginMacroVars(sBaseDir);
+      tstr sBaseDir = NppExecHelpers::GetEnvironmentVar(_T("TEMP"));
       if ( sBaseDir.IsEmpty() )
       {
         sBaseDir = getConfigPath();
@@ -5008,6 +5441,10 @@ void CNppExec::ReadOptions()
   {
     GetOptions().SetInt(OPTI_GOTO_MAXCOUNT, DEFAULT_GOTO_MAXCOUNT);
   }
+  if (GetOptions().GetInt(OPTI_EXECTEXT_MAXCOUNT) < 2)
+  {
+    GetOptions().SetInt(OPTI_EXECTEXT_MAXCOUNT, DEFAULT_EXECTEXT_MAXCOUNT);
+  }
   if (GetOptions().GetInt(OPTI_RICHEDIT_MAXTEXTLEN) < 0x10000)
   {
     GetOptions().SetInt(OPTI_RICHEDIT_MAXTEXTLEN, 0x10000);
@@ -5017,9 +5454,17 @@ void CNppExec::ReadOptions()
     GetOptions().SetInt(OPTI_SENDMSG_MAXBUFLEN, 0x10000);
   }
 
-  _consoleFont = NULL;
+  _execdlgFont = NULL;
   int dataSize = 0;
-  const LOGFONT* pLogFont = (const LOGFONT *) GetOptions().GetData(OPTD_CONSOLE_FONT, &dataSize);
+  const LOGFONT* pLogFont = (const LOGFONT *) GetOptions().GetData(OPTD_EXECDLG_FONT, &dataSize);
+  if ( pLogFont && (dataSize >= sizeof(LOGFONT)) )
+  {
+    _execdlgFont = CreateFontIndirect(pLogFont);
+  }
+
+  _consoleFont = NULL;
+  dataSize = 0;
+  pLogFont = (const LOGFONT *) GetOptions().GetData(OPTD_CONSOLE_FONT, &dataSize);
   if ( pLogFont && (dataSize >= sizeof(LOGFONT)) )
   {
     _consoleFont = CreateFontIndirect(pLogFont);
@@ -5194,15 +5639,36 @@ void CNppExec::ReadOptions()
   {
     GetOptions().SetBool(OPTB_CONSOLE_NOINTMSGS, false);
   }
+  if (GetOptions().GetInt(OPTB_CONSOLE_KILLPROCTREE) < 0)
+  {
+    GetOptions().SetBool(OPTB_CONSOLE_KILLPROCTREE, false);
+  }
   if (GetOptions().GetInt(OPTB_CONSOLE_PRINTMSGREADY) < 0)
   {
     GetOptions().SetBool(OPTB_CONSOLE_PRINTMSGREADY, true);
+  }
+  tstr sMsgReady = GetOptions().GetStr(OPTS_CONSOLE_CUSTOMMSGREADY);
+  if (!sMsgReady.IsEmpty())
+  {
+    NppExecHelpers::StrUnescape(sMsgReady);
+    GetOptions().SetStr(OPTS_CONSOLE_CUSTOMMSGREADY, sMsgReady.c_str());
   }
 
   int nAnsiEscSeq = GetOptions().GetInt(OPTI_CONSOLE_ANSIESCSEQ);
   if ( (nAnsiEscSeq < 0) || (nAnsiEscSeq >= CChildProcess::escTotalCount) )
   {
     GetOptions().SetInt(OPTI_CONSOLE_ANSIESCSEQ, CChildProcess::escKeepRaw);
+  }
+
+  int nExecTextMode = GetOptions().GetInt(OPTI_CONSOLE_EXECCLIPTEXTMODE);
+  if ( nExecTextMode < CNppExec::etfNone )
+  {
+    GetOptions().SetInt(OPTI_CONSOLE_EXECCLIPTEXTMODE, CNppExec::etfNone);
+  }
+  nExecTextMode = GetOptions().GetInt(OPTI_CONSOLE_EXECSELTEXTMODE);
+  if ( nExecTextMode < CNppExec::etfNone )
+  {
+      GetOptions().SetInt(OPTI_CONSOLE_EXECSELTEXTMODE, CNppExec::etfNone);
   }
 
   {
@@ -5249,6 +5715,18 @@ void CNppExec::ReadOptions()
 #endif
   }
 
+  const TCHAR* pszScriptFile = GetOptions().GetStr(OPTS_PLUGIN_TEMPSCRIPTFILE);
+  if (pszScriptFile && *pszScriptFile)
+    lstrcpy(SCRIPTFILE_TEMP, pszScriptFile);
+
+  pszScriptFile = GetOptions().GetStr(OPTS_PLUGIN_LASTSCRIPTFILE);
+  if (pszScriptFile && *pszScriptFile)
+    lstrcpy(SCRIPTFILE_LAST, pszScriptFile);
+
+  pszScriptFile = GetOptions().GetStr(OPTS_PLUGIN_SAVEDSCRIPTSFILE);
+  if (pszScriptFile && *pszScriptFile)
+    lstrcpy(SCRIPTFILE_SAVED, pszScriptFile);
+
   const tstr pathToTempScript = ExpandToFullConfigPath(SCRIPTFILE_TEMP, true);
   CFileBufT<TCHAR> fbuf;
   if (fbuf.LoadFromFile(pathToTempScript.c_str(), true, GetOptions().GetInt(OPTI_UTF8_DETECT_LENGTH)))
@@ -5261,9 +5739,30 @@ void CNppExec::ReadOptions()
     } 
   }
 
+  if (GetOptions().GetBool(OPTB_SAVELASTSCRIPT))
+  {
+    const tstr pathToLastScript = ExpandToFullConfigPath(SCRIPTFILE_LAST, true);
+    if (fbuf.LoadFromFile(pathToLastScript.c_str(), true, GetOptions().GetInt(OPTI_UTF8_DETECT_LENGTH)))
+    {
+      tstr Line;
+
+      while (fbuf.GetLine(Line) >= 0)
+      {
+        m_ScriptCmdList.Add(Line);
+      }
+
+      m_LastSavedCmdList = m_ScriptCmdList;
+    }
+  }
+
   const tstr pathToSavedScripts = ExpandToFullConfigPath(SCRIPTFILE_SAVED, true);
   m_ScriptsList.LoadFromFile(pathToSavedScripts.c_str(), GetOptions().GetInt(OPTI_UTF8_DETECT_LENGTH));
-  g_scriptFileChecker.AssignFile(pathToSavedScripts.c_str());
+
+  if (GetOptions().GetBool(OPTB_WATCHSCRIPTFILE))
+  {
+    m_FileWatcher.AddFile(pathToSavedScripts.c_str(), &m_ScriptFileChangeListener);
+  }
+
   /*
   const tstr pathToCloudSavedScripts = ExpandToFullConfigPath(SCRIPTFILE_SAVED, true);
   const tstr pathToLocalSavedScripts = ExpandToFullConfigPath(SCRIPTFILE_SAVED);
@@ -5521,7 +6020,7 @@ void CNppExec::SaveOptions()
     }
 
     SaveConfiguration();
-    SaveScripts();
+    SaveScripts(ssfSaveLastScript);
     ConsoleDlg::SaveCmdHistory();
 
     if ( Runtime::GetLogger().IsLogFileOpen() )
@@ -5533,35 +6032,51 @@ void CNppExec::SaveOptions()
   }
 }
 
-void CNppExec::SaveScripts()
+static void SaveScriptToFile(const tCmdList& CmdList, const tstr& FileName)
+{
+    CFileBufT<TCHAR> fbuf;
+
+    const CListItemT<tstr>* pLast = CmdList.GetLast();
+    const CListItemT<tstr>* pLine = CmdList.GetFirst();
+    for ( ; pLine != NULL; pLine = pLine->GetNext() )
+    {
+        const tstr& Line = pLine->GetItem();
+        fbuf.GetBufPtr()->Append(Line.c_str(), Line.length());
+        if (pLine != pLast)
+            fbuf.GetBufPtr()->Append(_T("\r\n"), 2);
+    }
+
+    fbuf.SaveToFile(FileName.c_str());
+}
+
+void CNppExec::SaveScripts(unsigned int nSaveFlags)
 {
   enum eSavedScriptFlags {
     ssfTemp    = 0x01,
-    ssfScripts = 0x02
+    ssfLast    = 0x02,
+    ssfScripts = 0x04
   };
 
-  CListItemT<tstr>* p;
-  CFileBufT<TCHAR>  fbuf;
-  tstr              Line;
-  unsigned int      nSaved = 0;
-  tstr              localTempScript = ExpandToFullConfigPath(SCRIPTFILE_TEMP);
-  tstr              localSavedScripts = ExpandToFullConfigPath(SCRIPTFILE_SAVED);
+  unsigned int nSaved = 0;
+  tstr         localTempScript = ExpandToFullConfigPath(SCRIPTFILE_TEMP);
+  tstr         localLastScript = ExpandToFullConfigPath(SCRIPTFILE_LAST);
+  tstr         localSavedScripts = ExpandToFullConfigPath(SCRIPTFILE_SAVED);
 
   if (m_TempScriptIsModified)
   {
-    fbuf.GetBufPtr()->Clear();
-    p = m_TempScript.GetCmdList().GetFirst();
-    while (p)
-    {
-      Line = p->GetItem();
-      if (p != m_TempScript.GetCmdList().GetLast())
-        Line.Append(_T("\r\n"), 2);
-      fbuf.GetBufPtr()->Append(Line.c_str(), Line.length());
-      p = p->GetNext();
-    }
-    fbuf.SaveToFile(localTempScript.c_str());
+    SaveScriptToFile(m_TempScript.GetCmdList(), localTempScript);
     m_TempScriptIsModified = false;
     nSaved |= ssfTemp;
+  }
+
+  if (GetOptions().GetBool(OPTB_SAVELASTSCRIPT))
+  {
+    if ((nSaveFlags & ssfSaveLastScript) && (m_LastSavedCmdList != m_ScriptCmdList))
+    {
+      SaveScriptToFile(m_ScriptCmdList, localLastScript);
+      m_LastSavedCmdList = m_ScriptCmdList;
+      nSaved |= ssfLast;
+    }
   }
 
   if (m_ScriptsList.IsModified())
@@ -5584,6 +6099,17 @@ void CNppExec::SaveScripts()
       ::CopyFile(localTempScript.c_str(), cloudTempScript.c_str(), FALSE);
     }
 
+    if (GetOptions().GetBool(OPTB_SAVELASTSCRIPT))
+    {
+      // Back up the last script to the cloud
+      tstr cloudLastScript = cloudPluginDir;
+      cloudLastScript += SCRIPTFILE_LAST;
+      if ((nSaved & ssfLast) || !NppExecHelpers::IsValidTextFile(cloudLastScript))
+      {
+        ::CopyFile(localLastScript.c_str(), cloudLastScript.c_str(), FALSE);
+      }
+    }
+
     // Back up the saved scripts to the cloud
     tstr cloudSavedScripts = cloudPluginDir;
     cloudSavedScripts += SCRIPTFILE_SAVED;
@@ -5602,7 +6128,8 @@ void CNppExec::SaveScripts()
 
   if (nSaved & ssfScripts)
   {
-    g_scriptFileChecker.UpdateFileInfo();
+    // There is no need to update the file info here,
+    // CDirectoryWatcher::WatchThreadProc takes care of it.
   }
 }
 
@@ -5750,7 +6277,7 @@ bool CNppExec::checkCmdListAndPrepareConsole(const CListT<tstr>& CmdList, bool b
         if ( p->GetItem().length() > 0 )
         {
             S = p->GetItem();
-            if ( !CScriptEngine::isCommentOrEmpty(this, S) )
+            if ( !CScriptEngine::isCmdCommentOrEmpty(this, S) && !CScriptEngine::isCmdDirective(this, S) )
             {
                 bExecute = true;
             }
@@ -5773,6 +6300,7 @@ bool CNppExec::checkCmdListAndPrepareConsole(const CListT<tstr>& CmdList, bool b
 
         if ( GetConsole().GetDialogWnd() ) 
         {
+            GetConsole().ClearCurrentInput();
             if ( bCanClearConsole && !GetOptions().GetBool(OPTB_CONSOLE_APPENDMODE) )
             {
                 if (!GetCommandExecutor().GetRunningScriptEngine()) // a collateral script may be running
@@ -5794,6 +6322,7 @@ void CNppExec::showConsoleDialog(eShowConsoleAction showAction, unsigned int nSh
     if (initConsoleDialog()) 
     {
       ConsoleDlg::DockDialog();
+      GetConsole().ApplyEditorColours(false);
       SendNppMsg(NPPM_DMMSHOW, 0, (LPARAM) GetConsole().GetDialogWnd());
       setConsoleVisible(true);
     }
@@ -5824,7 +6353,8 @@ void CNppExec::showConsoleDialog(eShowConsoleAction showAction, unsigned int nSh
 
 void CNppExec::printConsoleHelpInfo()
 {
-  GetConsole().PrintMessage(SZ_CONSOLE_HELP_INFO, false);
+  const UINT nMsgFlags = CNppExecConsole::pfLogThisMsg | CNppExecConsole::pfNewLine;
+  GetConsole().PrintMessage(SZ_CONSOLE_HELP_INFO, nMsgFlags);
 }
 
 void CNppExec::ShowError(LPCTSTR szMessage)
@@ -5846,6 +6376,11 @@ INT_PTR CNppExec::PluginDialogBox(UINT idDlg, DLGPROC lpDlgProc)
       MAKEINTRESOURCE(idDlg), m_nppData._nppHandle, lpDlgProc );
   ::SetFocus(hWndFocus);
   return nRet;
+}
+
+CInputBoxDlg& CNppExec::GetInputBoxDlg()
+{
+  return InputBoxDlg;
 }
 
 LRESULT CNppExec::SendNppMsg(UINT uMsg, WPARAM wParam, LPARAM lParam) // to Notepad++
@@ -5906,13 +6441,13 @@ TCHAR CNppConsoleRichEdit::GetNulChar()
 //-------------------------------------------------------------------------
 
 CNppExecConsole::CNppExecConsole() //: m_pNppExec(0)
-  : m_colorTextNorm(0)
+  : m_hDlg(NULL)
+  , m_hBkgndBrush(NULL)
+  , m_colorTextNorm(0)
   , m_colorTextMsg(0)
   , m_colorTextErr(0)
   , m_colorBkgnd(0)
 {
-    m_hDlg = NULL;
-    
     m_StateList.push_back(ConsoleState());
 }
 
@@ -5940,6 +6475,11 @@ CNppExecConsole::~CNppExecConsole()
     // as m_StateList is created last and destroyed first...
     // but just in case :)
     m_StateList.clear();
+
+    if ( m_hBkgndBrush != NULL )
+    {
+        ::DeleteObject(m_hBkgndBrush);
+    }
 }
 
 //CNppExec* CNppExecConsole::GetNppExec() const
@@ -6187,7 +6727,7 @@ void CNppExecConsole::_setCurrentColorBkgnd(COLORREF colorBkgnd)
     m_colorBkgnd = colorBkgnd;
 }
 
-void CNppExecConsole::PrintError(LPCTSTR cszMessage, bool bLogThisMsg )
+void CNppExecConsole::PrintError(LPCTSTR cszMessage, UINT nPrintFlags )
 {
     if ( CNppExec::_bIsNppShutdown )
         return;
@@ -6198,7 +6738,7 @@ void CNppExecConsole::PrintError(LPCTSTR cszMessage, bool bLogThisMsg )
 
     if ( !postponeThisCall(scrptEngnId) )
     {
-        _printError(scrptEngnId, cszMessage, bLogThisMsg);
+        _printError(scrptEngnId, cszMessage, nPrintFlags);
     }
     else
     {
@@ -6206,12 +6746,12 @@ void CNppExecConsole::PrintError(LPCTSTR cszMessage, bool bLogThisMsg )
         ConsoleState& state = _getState(scrptEngnId);
         auto& postponedStrings = state.PostponedStrings;
         postponedStrings.push_back( tstr(cszMessage) );
-        std::function<void ()> postponedCall = std::bind(&CNppExecConsole::_printError, this, scrptEngnId, postponedStrings.back().c_str(), bLogThisMsg);
+        std::function<void ()> postponedCall = std::bind(&CNppExecConsole::_printError, this, scrptEngnId, postponedStrings.back().c_str(), nPrintFlags);
         state.PostponedCalls.push_back(postponedCall);
     }
 }
 
-void CNppExecConsole::_printError(ScriptEngineId scrptEngnId, LPCTSTR cszMessage, bool bLogThisMsg)
+void CNppExecConsole::_printError(ScriptEngineId scrptEngnId, LPCTSTR cszMessage, UINT nPrintFlags)
 {
     if ( CNppExec::_bIsNppShutdown )
         return;
@@ -6221,7 +6761,7 @@ void CNppExecConsole::_printError(ScriptEngineId scrptEngnId, LPCTSTR cszMessage
     m_reConsole.AddStr( _T(""), _isScrollToEnd(), _getCurrentColorTextNorm() );
     _lockConsoleEndPos(scrptEngnId);
 
-    if ( bLogThisMsg && Runtime::GetLogger().IsLogFileOpen() )
+    if ( (nPrintFlags & pfLogThisMsg) && Runtime::GetLogger().IsLogFileOpen() )
     {
         tstr S = _T("<ERR> ");
         S += cszMessage;
@@ -6229,7 +6769,7 @@ void CNppExecConsole::_printError(ScriptEngineId scrptEngnId, LPCTSTR cszMessage
     }
 }
 
-void CNppExecConsole::PrintMessage(LPCTSTR cszMessage, bool bIsInternalMsg , bool bLogThisMsg )
+void CNppExecConsole::PrintMessage(LPCTSTR cszMessage, UINT nPrintFlags)
 {
     if ( CNppExec::_bIsNppShutdown )
         return;
@@ -6238,12 +6778,12 @@ void CNppExecConsole::PrintMessage(LPCTSTR cszMessage, bool bIsInternalMsg , boo
     if ( !_isOutputEnabled(scrptEngnId) )
         return;
 
-    if ( bIsInternalMsg && Runtime::GetNppExec().GetOptions().GetBool(OPTB_CONSOLE_NOINTMSGS) )
+    if ( (nPrintFlags & pfIsInternalMsg) && Runtime::GetNppExec().GetOptions().GetBool(OPTB_CONSOLE_NOINTMSGS) )
         return;
 
     if ( !postponeThisCall(scrptEngnId) )
     {
-        _printMessage(scrptEngnId, cszMessage, bIsInternalMsg, bLogThisMsg);
+        _printMessage(scrptEngnId, cszMessage, nPrintFlags);
     }
     else
     {
@@ -6251,22 +6791,25 @@ void CNppExecConsole::PrintMessage(LPCTSTR cszMessage, bool bIsInternalMsg , boo
         ConsoleState& state = _getState(scrptEngnId);
         auto& postponedStrings = state.PostponedStrings;
         postponedStrings.push_back( tstr(cszMessage) );
-        std::function<void ()> postponedCall = std::bind(&CNppExecConsole::_printMessage, this, scrptEngnId, postponedStrings.back().c_str(), bIsInternalMsg, bLogThisMsg);
+        std::function<void ()> postponedCall = std::bind(&CNppExecConsole::_printMessage, this, scrptEngnId, postponedStrings.back().c_str(), nPrintFlags);
         state.PostponedCalls.push_back(postponedCall);
     }
 }
 
-void CNppExecConsole::_printMessage(ScriptEngineId scrptEngnId, LPCTSTR cszMessage, bool /*bIsInternalMsg*/, bool bLogThisMsg)
+void CNppExecConsole::_printMessage(ScriptEngineId scrptEngnId, LPCTSTR cszMessage, UINT nPrintFlags)
 {
     if ( CNppExec::_bIsNppShutdown )
         return;
 
     // Important: SendMsg() calls must _not_ be under m_csStateList
-    m_reConsole.AddLine( cszMessage, FALSE, _getCurrentColorTextMsg() ); 
+    if ( nPrintFlags & pfNewLine )
+        m_reConsole.AddLine( cszMessage, FALSE, _getCurrentColorTextMsg() );
+    else
+        m_reConsole.AddStr( cszMessage, FALSE, _getCurrentColorTextMsg() );
     m_reConsole.AddStr( _T(""), _isScrollToEnd(), _getCurrentColorTextNorm() );
     _lockConsoleEndPos(scrptEngnId);
 
-    if ( bLogThisMsg && Runtime::GetLogger().IsLogFileOpen() )
+    if ( (nPrintFlags & pfLogThisMsg) && Runtime::GetLogger().IsLogFileOpen() )
     {
         tstr S = _T("<MSG> ");
         S += cszMessage;
@@ -6274,7 +6817,7 @@ void CNppExecConsole::_printMessage(ScriptEngineId scrptEngnId, LPCTSTR cszMessa
     }
 }
 
-void CNppExecConsole::PrintOutput(LPCTSTR cszMessage, bool bNewLine , bool bLogThisMsg )
+void CNppExecConsole::PrintOutput(LPCTSTR cszMessage, UINT nPrintFlags )
 {
     if ( CNppExec::_bIsNppShutdown )
         return;
@@ -6285,7 +6828,7 @@ void CNppExecConsole::PrintOutput(LPCTSTR cszMessage, bool bNewLine , bool bLogT
 
     if ( !postponeThisCall(scrptEngnId) )
     {
-        _printOutput(scrptEngnId, cszMessage, bNewLine, bLogThisMsg);
+        _printOutput(scrptEngnId, cszMessage, nPrintFlags);
     }
     else
     {
@@ -6293,12 +6836,12 @@ void CNppExecConsole::PrintOutput(LPCTSTR cszMessage, bool bNewLine , bool bLogT
         ConsoleState& state = _getState(scrptEngnId);
         auto& postponedStrings = state.PostponedStrings;
         postponedStrings.push_back( tstr(cszMessage) );
-        std::function<void ()> postponedCall = std::bind(&CNppExecConsole::_printOutput, this, scrptEngnId, postponedStrings.back().c_str(), bNewLine, bLogThisMsg);
+        std::function<void ()> postponedCall = std::bind(&CNppExecConsole::_printOutput, this, scrptEngnId, postponedStrings.back().c_str(), nPrintFlags);
         state.PostponedCalls.push_back(postponedCall);
     }
 }
 
-void CNppExecConsole::_printOutput(ScriptEngineId scrptEngnId, LPCTSTR cszMessage, bool bNewLine, bool bLogThisMsg)
+void CNppExecConsole::_printOutput(ScriptEngineId scrptEngnId, LPCTSTR cszMessage, UINT nPrintFlags)
 {
     if ( CNppExec::_bIsNppShutdown )
         return;
@@ -6314,7 +6857,7 @@ void CNppExecConsole::_printOutput(ScriptEngineId scrptEngnId, LPCTSTR cszMessag
         style = WarningAnalyzer.GetStyle();
     }
 
-    if ( bNewLine )
+    if ( nPrintFlags & pfNewLine )
     {
         m_reConsole.AddLine( cszMessage, _isScrollToEnd(), color, CFM_EFFECTS, style );
     }
@@ -6325,7 +6868,7 @@ void CNppExecConsole::_printOutput(ScriptEngineId scrptEngnId, LPCTSTR cszMessag
 
     _lockConsoleEndPos(scrptEngnId);
 
-    if ( bLogThisMsg && Runtime::GetLogger().IsLogFileOpen() )
+    if ( (nPrintFlags & pfLogThisMsg) && Runtime::GetLogger().IsLogFileOpen() )
     {
         tstr S = _T("<OUT> ");
         S += cszMessage;
@@ -6334,7 +6877,7 @@ void CNppExecConsole::_printOutput(ScriptEngineId scrptEngnId, LPCTSTR cszMessag
     }
 }
 
-void CNppExecConsole::PrintStr(LPCTSTR cszStr, bool bNewLine, bool bLogThisMsg )
+void CNppExecConsole::PrintStr(LPCTSTR cszStr, UINT nPrintFlags )
 {
     if ( CNppExec::_bIsNppShutdown )
         return;
@@ -6345,7 +6888,7 @@ void CNppExecConsole::PrintStr(LPCTSTR cszStr, bool bNewLine, bool bLogThisMsg )
 
     if ( !postponeThisCall(scrptEngnId) )
     {
-        _printStr(scrptEngnId, cszStr, bNewLine, bLogThisMsg);
+        _printStr(scrptEngnId, cszStr, nPrintFlags);
     }
     else
     {
@@ -6353,23 +6896,23 @@ void CNppExecConsole::PrintStr(LPCTSTR cszStr, bool bNewLine, bool bLogThisMsg )
         ConsoleState& state = _getState(scrptEngnId);
         auto& postponedStrings = state.PostponedStrings;
         postponedStrings.push_back( tstr(cszStr) );
-        std::function<void ()> postponedCall = std::bind(&CNppExecConsole::_printStr, this, scrptEngnId, postponedStrings.back().c_str(), bNewLine, bLogThisMsg);
+        std::function<void ()> postponedCall = std::bind(&CNppExecConsole::_printStr, this, scrptEngnId, postponedStrings.back().c_str(), nPrintFlags);
         state.PostponedCalls.push_back(postponedCall);
     }
 }
 
-void CNppExecConsole::_printStr(ScriptEngineId /*scrptEngnId*/, LPCTSTR cszStr, bool bNewLine, bool bLogThisMsg)
+void CNppExecConsole::_printStr(ScriptEngineId /*scrptEngnId*/, LPCTSTR cszStr, UINT nPrintFlags)
 {
     if ( CNppExec::_bIsNppShutdown )
         return;
 
     // Important: SendMsg() calls must _not_ be under m_csStateList
-    if ( bNewLine )
+    if ( nPrintFlags & pfNewLine )
         m_reConsole.AddLine( cszStr, _isScrollToEnd(), _getCurrentColorTextNorm(), CFM_EFFECTS, 0 );
     else
         m_reConsole.AddStr( cszStr, _isScrollToEnd(), _getCurrentColorTextNorm(), CFM_EFFECTS, 0 );
 
-    if ( bLogThisMsg && Runtime::GetLogger().IsLogFileOpen() )
+    if ( (nPrintFlags & pfLogThisMsg) && Runtime::GetLogger().IsLogFileOpen() )
     {
         tstr S = _T("<STR> ");
         S += cszStr;
@@ -6377,7 +6920,7 @@ void CNppExecConsole::_printStr(ScriptEngineId /*scrptEngnId*/, LPCTSTR cszStr, 
     }
 }
 
-void CNppExecConsole::PrintSysError(LPCTSTR cszFunctionName, DWORD dwErrorCode, bool bLogThisMsg )
+void CNppExecConsole::PrintSysError(LPCTSTR cszFunctionName, DWORD dwErrorCode, UINT nPrintFlags )
 {
     if ( CNppExec::_bIsNppShutdown )
         return;
@@ -6388,7 +6931,7 @@ void CNppExecConsole::PrintSysError(LPCTSTR cszFunctionName, DWORD dwErrorCode, 
 
     if ( !postponeThisCall(scrptEngnId) )
     {
-        _printSysError(scrptEngnId, cszFunctionName, dwErrorCode, bLogThisMsg);
+        _printSysError(scrptEngnId, cszFunctionName, dwErrorCode, nPrintFlags);
     }
     else
     {
@@ -6396,12 +6939,12 @@ void CNppExecConsole::PrintSysError(LPCTSTR cszFunctionName, DWORD dwErrorCode, 
         ConsoleState& state = _getState(scrptEngnId);
         auto& postponedStrings = state.PostponedStrings;
         postponedStrings.push_back( tstr(cszFunctionName) );
-        std::function<void ()> postponedCall = std::bind(&CNppExecConsole::_printSysError, this, scrptEngnId, postponedStrings.back().c_str(), dwErrorCode, bLogThisMsg);
+        std::function<void ()> postponedCall = std::bind(&CNppExecConsole::_printSysError, this, scrptEngnId, postponedStrings.back().c_str(), dwErrorCode, nPrintFlags);
         state.PostponedCalls.push_back(postponedCall);
     }
 }
 
-void CNppExecConsole::_printSysError(ScriptEngineId scrptEngnId, LPCTSTR cszFunctionName, DWORD dwErrorCode, bool bLogThisMsg)
+void CNppExecConsole::_printSysError(ScriptEngineId scrptEngnId, LPCTSTR cszFunctionName, DWORD dwErrorCode, UINT nPrintFlags)
 {
     if ( CNppExec::_bIsNppShutdown )
         return;
@@ -6422,8 +6965,8 @@ void CNppExecConsole::_printSysError(ScriptEngineId scrptEngnId, LPCTSTR cszFunc
             0, 
             NULL );
 
-        _printError( scrptEngnId, szText, bLogThisMsg );
-        _printError( scrptEngnId, lpMsgBuf, bLogThisMsg );
+        _printError( scrptEngnId, szText, nPrintFlags );
+        _printError( scrptEngnId, lpMsgBuf, nPrintFlags );
 
         ::LocalFree(lpMsgBuf);
     }
@@ -6501,14 +7044,17 @@ void CNppExecConsole::_lockConsoleEndPos(ScriptEngineId scrptEngnId)
     _lockConsolePos(scrptEngnId, m_reConsole.GetTextLengthEx());
 }
 
-void CNppExecConsole::LockConsoleEndPosAfterEnterPressed()
+void CNppExecConsole::LockConsoleEndPosAfterEnterPressed(bool bForce )
 {
     if ( CNppExec::_bIsNppShutdown )
         return;
 
     const ScriptEngineId scrptEngnId = GetScriptEngineId();
-    if ( _isOutputEnabled(scrptEngnId) ) // <-- this is the only function that works when _isOutputEnabled() is false
-        return;
+    if ( !bForce )
+    {
+        if ( _isOutputEnabled(scrptEngnId) ) // <-- this is the only function that works when _isOutputEnabled() is false
+            return;
+    }
 
     if ( !postponeThisCall(scrptEngnId) )
     {
@@ -6698,14 +7244,34 @@ void CNppExecConsole::ClearText(bool bForce )
     }
 }
 
+void CNppExecConsole::ClearCurrentInput()
+{
+    extern INT nConsoleFirstUnlockedPos; // this is really ugly, but the whole design of the ConsoleDlg is very bad :(
+
+    if ( CNppExec::_bIsNppShutdown )
+        return;
+
+    INT nLen = m_reConsole.GetTextLengthEx();
+    if ( nLen > nConsoleFirstUnlockedPos )
+    {
+        m_reConsole.ExSetSel(nConsoleFirstUnlockedPos, -1);
+        m_reConsole.ReplaceSelText(_T(""));
+    }
+}
+
 void CNppExecConsole::_clearText(ScriptEngineId scrptEngnId)
 {
     if ( CNppExec::_bIsNppShutdown )
         return;
 
+    Runtime::GetNppExec().GetWarningAnalyzer().ClearCachedMatches();
+
     // Important: SendMsg() calls must _not_ be under m_csStateList
-    m_reConsole.SetText( _T("") );
-    _restoreDefaultTextStyle( scrptEngnId, true );
+    if ( !m_reConsole.IsEmpty() )
+    {
+        m_reConsole.SetText( _T("") );
+        _restoreDefaultTextStyle( scrptEngnId, true );
+    }
 }
 
 void CNppExecConsole::RestoreDefaultTextStyle(bool bLockPos)
@@ -6767,6 +7333,44 @@ void CNppExecConsole::UpdateColours()
     }
 }
 
+void CNppExecConsole::ApplyEditorColours(bool bCanUpdateColours)
+{
+    CNppExec& NppExec = Runtime::GetNppExec();
+
+    if ( NppExec.GetOptions().GetBool(OPTB_CONSOLE_USEEDITORCOLORS) )
+    {
+        bool bColorChanged = false;
+
+        const COLORREF prevTextNorm = GetCurrentColorTextNorm();
+        const COLORREF prevBkgnd = GetCurrentColorBkgnd();
+
+        const COLORREF editorTextNorm = static_cast<COLORREF>( NppExec.SendNppMsg(NPPM_GETEDITORDEFAULTFOREGROUNDCOLOR) );
+        const COLORREF editorBkgnd = static_cast<COLORREF>( NppExec.SendNppMsg(NPPM_GETEDITORDEFAULTBACKGROUNDCOLOR) );
+
+        if ( editorBkgnd != prevBkgnd )
+        {
+            SetCurrentColorBkgnd(editorBkgnd);
+            if ( m_hBkgndBrush != NULL )
+            {
+                ::DeleteObject(m_hBkgndBrush);
+            }
+            m_hBkgndBrush = ::CreateSolidBrush(editorBkgnd);
+            bColorChanged = true;
+        }
+
+        if ( editorTextNorm != prevTextNorm )
+        {
+            SetCurrentColorTextNorm(editorTextNorm);
+            bColorChanged = true;
+        }
+
+        if ( bColorChanged && bCanUpdateColours )
+        {
+            UpdateColours();
+        }
+    }
+}
+
 void CNppExecConsole::_updateColours(ScriptEngineId scrptEngnId)
 {
     if ( CNppExec::_bIsNppShutdown )
@@ -6803,6 +7407,8 @@ void CNppExecConsole::_updateColours(ScriptEngineId scrptEngnId)
     m_reConsole.SendMsg( EM_SETCHARFORMAT, SCF_ALL, (LPARAM) &cf );
     // set character format explicitly
     _restoreDefaultTextStyle(scrptEngnId, false);
+
+    ::PostMessage(m_hDlg, WM_CONSOLEDLG_UPDATECOLOR, 0, 0);
 }
 
 void CNppExecConsole::ProcessSlashR() // "\r"
